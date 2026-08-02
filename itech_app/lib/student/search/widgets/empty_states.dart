@@ -1,0 +1,188 @@
+import 'package:flutter/material.dart';
+
+import '../../../theme/design_tokens.dart';
+
+class NoResultsState extends StatelessWidget {
+  const NoResultsState({
+    super.key,
+    required this.query,
+    required this.onUseChip,
+  });
+
+  final String query;
+  final ValueChanged<String> onUseChip;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    const popular = ['Multimeter', 'Wrench', 'Arduino', 'Oscilloscope'];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.search_rounded, color: PupColors.cyberAmber),
+              const SizedBox(width: 10),
+              Text(
+                'No results found for "$query"',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: PupColors.slateGray,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: glassDecoration(
+              context,
+              PupColors.cyberAmber,
+              borderRadius: 18,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Try searching for:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: isDark
+                        ? theme.colorScheme.onSurface
+                        : PupColors.slateGray,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '• Different keywords',
+                  style: TextStyle(
+                    color: isDark
+                        ? theme.colorScheme.onSurfaceVariant
+                        : PupColors.ashGray,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  '• Check spelling',
+                  style: TextStyle(
+                    color: isDark
+                        ? theme.colorScheme.onSurfaceVariant
+                        : PupColors.ashGray,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  '• Use shorter terms',
+                  style: TextStyle(
+                    color: isDark
+                        ? theme.colorScheme.onSurfaceVariant
+                        : PupColors.ashGray,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Popular Searches:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: isDark
+                        ? theme.colorScheme.onSurface
+                        : PupColors.slateGray,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 38,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: popular.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final label = popular[i];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => onUseChip(label),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: PupColors.ashGray.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                                color: PupColors.slateGray,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SearchingShimmerState extends StatelessWidget {
+  const SearchingShimmerState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Simple shimmer blocks (no dependency)
+    Widget block() => Container(
+      height: 110,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.white.withValues(alpha: 0.55),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              Icon(Icons.hourglass_bottom_rounded, color: PupColors.cyberAmber),
+              SizedBox(width: 8),
+              Text(
+                'Searching…',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: PupColors.slateGray,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...List.generate(
+            4,
+            (_) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: block(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

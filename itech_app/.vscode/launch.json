@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "itech_app (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+      ]
+    },
+    {
+      "name": "itech_app (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+      ]
+    },
+    {
+      "name": "itech_app (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "edge",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+      ]
+    }
+  ]
+}
+
