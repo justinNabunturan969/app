@@ -14,6 +14,13 @@ class AuthValidators {
     return null;
   }
 
+  /// Students may authenticate with their school ID or their PUP email.
+  static String? validateStudentLogin(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.contains('@')) return validatePupEmail(v);
+    return validateStudentId(v);
+  }
+
   static String? validatePupEmail(String? value) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return 'PUP email is required.';
@@ -39,7 +46,10 @@ class AuthValidators {
   static String? validatePassword(String? value) {
     final v = value ?? '';
     if (v.isEmpty) return 'Password is required.';
-    if (v.length < 8) return 'Password must be at least 8 characters.';
+    // Supabase Auth's default minimum is six characters. Requiring more in
+    // the client prevented valid existing accounts (such as `admin1`) from
+    // ever reaching Supabase.
+    if (v.length < 6) return 'Password must be at least 6 characters.';
     return null;
   }
 

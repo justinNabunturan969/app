@@ -228,7 +228,7 @@ class _StudentBorrowingsScreenState extends State<StudentBorrowingsScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Return equipment?'),
         content: Text(
-          'Mark "${b.equipmentName}" as returned? It will move to your history.',
+          'Mark "${b.equipmentName}" as returned? The admin will be notified to verify the physical return.',
         ),
         actions: [
           TextButton(
@@ -247,11 +247,16 @@ class _StudentBorrowingsScreenState extends State<StudentBorrowingsScreen>
       ),
     );
     if (ok != true) return;
-    ctrl.returnBorrowing(b.id);
+    final returned = await ctrl.returnBorrowing(b.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${b.equipmentName} returned'),
+        content: Text(
+          returned
+              ? '${b.equipmentName} returned — admin notified'
+              : 'Could not submit the return request. Please try again.',
+        ),
+        backgroundColor: returned ? null : PupColors.signalRed,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -359,8 +364,9 @@ class _SummaryCardState extends State<_SummaryCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -545,14 +551,16 @@ class _BorrowingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
 
     final style = _statusStyle;
-    final isActionable = borrowing.status == BorrowingStatus.active ||
+    final isActionable =
+        borrowing.status == BorrowingStatus.active ||
         borrowing.status == BorrowingStatus.overdue;
     final isLive = isActionable; // shows live countdown + bar
 
@@ -766,8 +774,9 @@ class _CountdownAndBar extends StatelessWidget {
       if (total <= 0) {
         progress = 1.0;
       } else {
-        final elapsed =
-            DateTime.now().difference(borrowing.borrowDate).inSeconds;
+        final elapsed = DateTime.now()
+            .difference(borrowing.borrowDate)
+            .inSeconds;
         progress = (elapsed / total).clamp(0.0, 1.0);
       }
     }
@@ -808,10 +817,7 @@ class _CountdownAndBar extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [
-                          barColor.withValues(alpha: 0.7),
-                          barColor,
-                        ],
+                        colors: [barColor.withValues(alpha: 0.7), barColor],
                       ),
                     ),
                   ),

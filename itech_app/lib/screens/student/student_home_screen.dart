@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme_menu_button.dart';
+import '../../app/language_controller.dart';
 import '../../student/models.dart';
-import '../../student/student_dashboard_controller.dart';
+import '../../student/search/widgets/borrow_confirm_sheet.dart';
 import '../../student/search/widgets/voice_search_overlay.dart';
+import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/empty_state_view.dart';
 
@@ -70,10 +72,31 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Future<void> _refresh(StudentDashboardController ctrl) async {
-    // Prototype refresh: bounce, no-op. Wire to API later.
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    setState(() {});
+    // Pulls every list (equipment, borrowings, notifications, profile)
+    // from Supabase in parallel via the controller's `load()`. We keep
+    // a small floor delay so the RefreshIndicator has a moment to
+    // finish its own animation even on a near-instant response.
+    await Future.wait([
+      ctrl.load(),
+      Future<void>.delayed(const Duration(milliseconds: 400)),
+    ]);
+  }
+
+  /// Opens the borrow confirmation sheet for the given equipment item.
+  /// Wired to the home screen's equipment grid — tapping a card (or the
+  /// Borrow button on it) drops the user into the same aesthetic
+  /// confirmation flow as the search screen, with the DB write going
+  /// through `StudentDashboardController.requestBorrowing`.
+  Future<void> _onBorrowEquipment(
+    BuildContext context,
+    Equipment equipment,
+  ) async {
+    final created = await BorrowConfirmSheet.show(
+      context,
+      equipment: equipment,
+    );
+    if (!context.mounted || created == null) return;
+    showBorrowSuccessSnackBar(context, created.equipmentName);
   }
 
   @override
@@ -82,12 +105,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
     return Consumer<StudentDashboardController>(
       builder: (context, ctrl, _) {
+        final language = context.watch<LanguageController>().language;
         final firstName = ctrl.studentFirstName;
         final greeting = hour < 12
             ? 'Good Morning'
             : hour < 18
-                ? 'Good Afternoon'
-                : 'Good Evening';
+            ? 'Good Afternoon'
+            : 'Good Evening';
 
         final items = _visibleEquipment(ctrl);
         final isSearching = ctrl.isSearching;
@@ -228,18 +252,20 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                           sliver: SliverGrid(
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 10,
-                              crossAxisSpacing: 10,
-                              childAspectRatio: 1.45,
-                            ),
+                                  crossAxisCount: 2,
+                                  mainAxisSpacing: 10,
+                                  crossAxisSpacing: 10,
+                                  // Keep enough vertical room for a two-line
+                                  // equipment name plus the borrow CTA on
+                                  // narrow phones. The old 1.45 ratio could
+                                  // overflow the card by a few pixels.
+                                  childAspectRatio: 1.15,
+                                ),
                             delegate: SliverChildBuilderDelegate(
                               (context, i) => _EquipmentCard(
-                                name: items[i].name,
-                                category: items[i].category,
-                                available: items[i].available > 0,
-                                availableCount: items[i].available,
-                                totalCount: items[i].total,
+                                equipment: items[i],
+                                onBorrow: () =>
+                                    _onBorrowEquipment(context, items[i]),
                               ),
                               childCount: items.length,
                             ),
@@ -247,9 +273,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         ),
                       // Recently borrowed strip — only when no active search
                       if (!hasQuery && recent.isNotEmpty) ...[
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: 22),
-                        ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 22)),
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -264,8 +288,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                             height: 110,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               itemCount: recent.length,
                               separatorBuilder: (_, _) =>
                                   const SizedBox(width: 10),
@@ -286,7 +311,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         _searchC.text = text;
                         ctrl.submitSearch(text);
                       },
+                      onPartialTranscribed: (text) {
+                        _searchC.text = text;
+                        ctrl.submitSearch(text);
+                      },
                       onCancel: () => setState(() => _showVoice = false),
+                      language: language,
                     ),
                   ),
               ],
@@ -317,8 +347,9 @@ class _GreetingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -406,8 +437,9 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -539,10 +571,7 @@ class _SearchBar extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 12),
-                child: Icon(
-                  Icons.search_rounded,
-                  color: PupColors.techCyan,
-                ),
+                child: Icon(Icons.search_rounded, color: PupColors.techCyan),
               ),
               Container(
                 width: 1,
@@ -554,7 +583,10 @@ class _SearchBar extends StatelessWidget {
               ),
             ],
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 0,
+            minHeight: 0,
+          ),
           filled: true,
           fillColor: fill,
           enabledBorder: OutlineInputBorder(
@@ -686,9 +718,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final color = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
+    final color = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
 
     return Row(
       children: [
@@ -713,139 +743,167 @@ class _SectionTitle extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _EquipmentCard extends StatelessWidget {
-  const _EquipmentCard({
-    required this.name,
-    required this.category,
-    required this.available,
-    required this.availableCount,
-    required this.totalCount,
-  });
+  const _EquipmentCard({required this.equipment, required this.onBorrow});
 
-  final String name;
-  final String category;
-  final bool available;
-  final int availableCount;
-  final int totalCount;
+  final Equipment equipment;
+  final VoidCallback onBorrow;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final ribbonColor =
-        available ? PupColors.techCyan : PupColors.signalRed;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final available = equipment.available > 0;
+    final ribbonColor = available ? PupColors.techCyan : PupColors.signalRed;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
 
     final mainIcon = available
-        ? _iconForCategory(category)
+        ? _iconForCategory(equipment.category)
         : Icons.lock_outline_rounded;
 
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: PupGlass.statCardGlow(
-          context: context,
-          accent: ribbonColor,
-          borderRadius: 16,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        ribbonColor.withValues(alpha: 0.32),
-                        ribbonColor.withValues(alpha: 0.08),
-                      ],
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      // InkWell renders the ripple. Wrap with `Material` so the
+      // ripple clips to the rounded corners instead of the default
+      // rectangular hit area.
+      child: InkWell(
+        onTap: onBorrow,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: PupGlass.statCardGlow(
+            context: context,
+            accent: ribbonColor,
+            borderRadius: 16,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          ribbonColor.withValues(alpha: 0.32),
+                          ribbonColor.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: ribbonColor.withValues(alpha: 0.45),
+                        width: 1.0,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: ribbonColor.withValues(alpha: 0.45),
-                      width: 1.0,
+                    child: Icon(mainIcon, color: ribbonColor, size: 18),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ribbonColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: ribbonColor.withValues(alpha: 0.4),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      available ? 'Available' : 'Borrowed',
+                      style: TextStyle(
+                        color: ribbonColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 9.5,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
-                  child: Icon(mainIcon, color: ribbonColor, size: 18),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: ribbonColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: ribbonColor.withValues(alpha: 0.4),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    available ? 'Available' : 'Borrowed',
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    equipment.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: ribbonColor,
+                      color: titleColor,
                       fontWeight: FontWeight.w900,
-                      fontSize: 9.5,
-                      letterSpacing: 0.4,
+                      fontSize: 12.5,
+                      height: 1.2,
                     ),
                   ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: titleColor,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12.5,
-                    height: 1.2,
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        equipment.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: subtleText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${equipment.available}/${equipment.total}',
+                        style: TextStyle(
+                          color: subtleText,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: subtleText,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10,
+                  const SizedBox(height: 8),
+                  // The visible Borrow CTA. Lives inside the InkWell so a
+                  // tap anywhere on the card (including this row) opens
+                  // the confirmation sheet, but rendering it as its own
+                  // row gives the user an obvious affordance.
+                  Row(
+                    children: [
+                      Icon(
+                        available ? Icons.outbox_rounded : Icons.block_rounded,
+                        size: 13,
+                        color: available
+                            ? PupColors.cyberAmber
+                            : PupColors.ashGray,
                       ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '$availableCount/$totalCount',
-                      style: TextStyle(
-                        color: subtleText,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 10,
+                      const SizedBox(width: 4),
+                      Text(
+                        available ? 'Tap to borrow' : 'Out of stock',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          color: available
+                              ? PupColors.cyberAmber
+                              : PupColors.ashGray,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -880,8 +938,9 @@ class _RecentActivityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     return Container(
       width: 220,

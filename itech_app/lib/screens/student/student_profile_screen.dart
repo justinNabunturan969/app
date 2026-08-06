@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme_menu_button.dart';
+import '../../app/language_controller.dart';
+import '../../data/repositories/repository_bundle.dart';
 import '../../features/analytics/widgets/achievement_badge.dart';
 import '../../main.dart';
 import '../../student/student_dashboard_controller.dart';
@@ -38,6 +40,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
     return Consumer<StudentDashboardController>(
       builder: (context, ctrl, _) {
+        final language = context.watch<LanguageController>();
+        final copy = AppCopy(language.language);
         return Scaffold(
           body: SafeArea(
             bottom: false,
@@ -63,7 +67,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 ),
                               ),
                             ),
-                            const _EditProfileButton(),
+                            _EditProfileButton(
+                              onPressed: () =>
+                                  _showEditProfileSheet(context, ctrl),
+                            ),
                             const SizedBox(width: 4),
                             const ThemeMenuButton(),
                           ],
@@ -127,7 +134,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         _InfoRow(
                           icon: Icons.class_rounded,
                           label: 'Year & Section',
-                          value: '${ctrl.studentYearLevel} • ${ctrl.studentSection}',
+                          value:
+                              '${ctrl.studentYearLevel} • ${ctrl.studentSection}',
                         ),
                         const SizedBox(height: 8),
                         _InfoRow(
@@ -185,9 +193,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         const SizedBox(height: 8),
                         _NavRow(
                           icon: Icons.language_rounded,
-                          title: 'Language',
-                          trailing: 'English',
-                          onTap: () => _snack(context, 'Language settings coming soon'),
+                          title: copy.appLanguage,
+                          trailing: language.language.label,
+                          onTap: () =>
+                              _showLanguagePicker(context, language, copy),
                         ),
                         const SizedBox(height: 18),
 
@@ -201,19 +210,22 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         _NavRow(
                           icon: Icons.help_center_rounded,
                           title: 'Help Center',
-                          onTap: () => _snack(context, 'Opening Help Center...'),
+                          onTap: () =>
+                              _snack(context, 'Opening Help Center...'),
                         ),
                         const SizedBox(height: 8),
                         _NavRow(
                           icon: Icons.description_rounded,
                           title: 'Terms of Service',
-                          onTap: () => _snack(context, 'Opening Terms of Service...'),
+                          onTap: () =>
+                              _snack(context, 'Opening Terms of Service...'),
                         ),
                         const SizedBox(height: 8),
                         _NavRow(
                           icon: Icons.privacy_tip_rounded,
                           title: 'Privacy Policy',
-                          onTap: () => _snack(context, 'Opening Privacy Policy...'),
+                          onTap: () =>
+                              _snack(context, 'Opening Privacy Policy...'),
                         ),
                         const SizedBox(height: 8),
                         _NavRow(
@@ -255,7 +267,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Log out?'),
-        content: const Text('You will need to sign in again to access your borrowings.'),
+        content: const Text(
+          'You will need to sign in again to access your borrowings.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -285,6 +299,167 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
   }
 
+  Future<void> _showLanguagePicker(
+    BuildContext context,
+    LanguageController language,
+    AppCopy copy,
+  ) async {
+    final selected = await showModalBottomSheet<AppLanguage>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                copy.chooseAppLanguage,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(copy.appLanguageHelp),
+              const SizedBox(height: 12),
+              for (final option in AppLanguage.values)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    option == AppLanguage.english
+                        ? Icons.language_rounded
+                        : option == AppLanguage.tagalog
+                        ? Icons.record_voice_over_rounded
+                        : Icons.forum_rounded,
+                  ),
+                  title: Text(option.label),
+                  subtitle: Text(option.speechLocaleId),
+                  trailing: option == language.language
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          color: PupColors.mintGreen,
+                        )
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, option),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await language.setLanguage(selected);
+    if (!context.mounted) return;
+    _snack(context, copy.languageSelected(selected.label));
+  }
+
+  Future<void> _showEditProfileSheet(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final name = TextEditingController(text: ctrl.studentName);
+    final program = TextEditingController(text: ctrl.studentProgram);
+    final year = TextEditingController(text: ctrl.studentYearLevel);
+    final section = TextEditingController(text: ctrl.studentSection);
+
+    final values = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+        ),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Edit profile',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Full name'),
+                validator: (value) =>
+                    (value?.trim().isEmpty ?? true) ? 'Enter your name.' : null,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: program,
+                decoration: const InputDecoration(labelText: 'Program'),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: year,
+                      decoration: const InputDecoration(
+                        labelText: 'Year level',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: section,
+                      decoration: const InputDecoration(labelText: 'Section'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () {
+                  if (!(formKey.currentState?.validate() ?? false)) return;
+                  Navigator.pop(sheetContext, {
+                    'fullName': name.text,
+                    'program': program.text,
+                    'yearLevel': year.text,
+                    'section': section.text,
+                  });
+                },
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('Save changes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    name.dispose();
+    program.dispose();
+    year.dispose();
+    section.dispose();
+    if (values == null || !context.mounted) return;
+
+    try {
+      await context.read<RepositoryBundle>().user.updateCurrentProfile(
+        fullName: values['fullName']!,
+        program: values['program']!,
+        yearLevel: values['yearLevel']!,
+        section: values['section']!,
+      );
+      await ctrl.load();
+      if (!context.mounted) return;
+      _snack(context, 'Profile updated.');
+    } catch (_) {
+      if (!context.mounted) return;
+      _snack(context, 'Could not update your profile. Please try again.');
+    }
+  }
+
   void _showAboutDialog(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -311,8 +486,18 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
 String _formatMemberSince(DateTime d) {
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
   return '${months[d.month - 1]} ${d.year}';
 }
@@ -337,10 +522,7 @@ List<_Achievement> _buildAchievements(StudentDashboardController ctrl) {
     _Achievement('First Borrow', hasHistory || ctrl.activeBorrowingsCount > 0),
     _Achievement('On-Time Returner', hasReturned),
     _Achievement('Frequent Borrower', isFrequent),
-    _Achievement(
-      'Overdue-Free',
-      !hasOverdue && ctrl.totalLoans > 0,
-    ),
+    _Achievement('Overdue-Free', !hasOverdue && ctrl.totalLoans > 0),
     if (isVeteran) _Achievement('Veteran Borrower (10+)', true),
   ];
 }
@@ -378,7 +560,9 @@ class _ProfileHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -599,7 +783,9 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final valueColor = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final valueColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final labelColor = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -738,7 +924,9 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final valueColor = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final valueColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final labelColor = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.65)
         : PupColors.ashGray;
@@ -825,7 +1013,9 @@ class _NavRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.6)
         : PupColors.ashGray;
@@ -838,9 +1028,7 @@ class _NavRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.white,
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isDark
@@ -883,11 +1071,7 @@ class _NavRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: subtleText,
-              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: subtleText),
             ],
           ),
         ),
@@ -919,7 +1103,9 @@ class _SwitchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.6)
         : PupColors.ashGray;
@@ -927,9 +1113,7 @@ class _SwitchRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.white,
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
@@ -991,27 +1175,19 @@ class _SwitchRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _EditProfileButton extends StatelessWidget {
-  const _EditProfileButton();
+  const _EditProfileButton({required this.onPressed});
+
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final fg = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
+    final fg = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
 
     return IconButton(
       tooltip: 'Edit profile',
-      onPressed: () {
-        HapticFeedback.selectionClick();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Edit profile coming soon'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
+      onPressed: onPressed,
       icon: Icon(Icons.edit_rounded, color: fg, size: 20),
     );
   }
@@ -1039,9 +1215,7 @@ class _LogoutButton extends StatelessWidget {
         ),
         style: OutlinedButton.styleFrom(
           foregroundColor: PupColors.signalRed,
-          side: BorderSide(
-            color: PupColors.signalRed.withValues(alpha: 0.5),
-          ),
+          side: BorderSide(color: PupColors.signalRed.withValues(alpha: 0.5)),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

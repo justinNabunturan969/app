@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/design_tokens.dart';
 import 'models.dart';
-import 'student_dashboard_controller.dart';
 
 class StudentMockData {
   static const String studentName = 'Juan Dela Cruz';

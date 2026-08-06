@@ -7,9 +7,11 @@ import '../screens/onboarding/welcome_screen.dart';
 import '../screens/role_selection/role_selection_screen.dart';
 import '../auth/login/student_login_screen.dart';
 import '../auth/login/admin_login_screen.dart';
+import '../auth/signup/student_signup_screen.dart';
 import '../screens/design_system/design_system_screen.dart';
 import '../screens/shell/student_shell.dart';
 import '../screens/shell/admin_shell.dart';
+import '../screens/admin/admin_profile_screen.dart';
 
 /// Router for PUP-ITech Borrowing App.
 class AppRouter {
@@ -53,6 +55,14 @@ class AppRouter {
         ),
       ),
       GoRoute(
+        path: '/student/signup',
+        name: 'studentSignup',
+        pageBuilder: (context, state) => _leftSlidePage(
+          key: state.pageKey,
+          child: const StudentSignupScreen(),
+        ),
+      ),
+      GoRoute(
         path: '/admin/login',
         name: 'adminLogin',
         pageBuilder: (context, state) =>
@@ -69,6 +79,14 @@ class AppRouter {
         name: 'adminShell',
         pageBuilder: (context, state) =>
             _fadeScalePage(key: state.pageKey, child: const AdminShell()),
+      ),
+      GoRoute(
+        path: '/admin/profile',
+        name: 'adminProfile',
+        pageBuilder: (context, state) => _rightSlidePage(
+          key: state.pageKey,
+          child: const AdminProfileScreen(),
+        ),
       ),
       GoRoute(
         path: '/student/design-system',
@@ -91,6 +109,7 @@ class AppRouter {
       '/welcome',
       '/role',
       '/student/login',
+      '/student/signup',
       '/admin/login',
     };
 

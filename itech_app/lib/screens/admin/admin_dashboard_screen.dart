@@ -29,8 +29,9 @@ class AdminDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -39,8 +40,10 @@ class AdminDashboardScreen extends StatelessWidget {
       builder: (context, ctrl, _) {
         final equipment = ctrl.equipment;
         final totalUnits = equipment.fold<int>(0, (a, e) => a + e.total);
-        final availableUnits =
-            equipment.fold<int>(0, (a, e) => a + e.available);
+        final availableUnits = equipment.fold<int>(
+          0,
+          (a, e) => a + e.available,
+        );
         final outCount = ctrl.activeBorrowingsCount + ctrl.overdueCount;
         final pendingCount = ctrl.pendingRequestsCount;
         final overdueCount = ctrl.overdueCount;
@@ -55,9 +58,7 @@ class AdminDashboardScreen extends StatelessWidget {
             bottom: false,
             child: RefreshIndicator(
               onRefresh: () async {
-                await Future<void>.delayed(
-                  const Duration(milliseconds: 500),
-                );
+                await Future<void>.delayed(const Duration(milliseconds: 500));
                 if (context.mounted) {
                   // Trigger a re-build so any countdown-driven values
                   // refresh visually after the pull gesture.
@@ -74,6 +75,13 @@ class AdminDashboardScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        // SliverToBoxAdapter hands the child unbounded vertical
+                        // space. With the default `mainAxisSize: max` the
+                        // Column would try to grow to infinity and Flutter
+                        // would render zero content (looks like a blank
+                        // screen). `min` makes the Column size to the sum
+                        // of its children, which is what we want here.
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           // Header
                           Row(
@@ -107,16 +115,7 @@ class AdminDashboardScreen extends StatelessWidget {
                               ProfileAvatarButton(
                                 initials: 'AD',
                                 roleLabel: 'Admin',
-                                onProfile: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Admin profile (prototype).',
-                                      ),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                },
+                                onProfile: () => context.push('/admin/profile'),
                                 onLogout: () => _logout(context),
                                 onSwitchTheme: () {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -145,6 +144,95 @@ class AdminDashboardScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 14),
                           ],
+
+                          // Pending requests are the first operational task
+                          // for staff, so keep their actionable preview at the
+                          // top of the dashboard rather than below analytics.
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: _SectionHeader(
+                                  title: 'Pending Requests',
+                                  icon: Icons.hourglass_top_rounded,
+                                  accent: PupColors.cyberAmber,
+                                ),
+                              ),
+                              if (pending.isNotEmpty && onSwitchTab != null)
+                                TextButton(
+                                  onPressed: () => onSwitchTab!(3),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: PupColors.cyberAmber,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'See all',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (pending.isEmpty)
+                            const EmptyActivityHint(
+                              label:
+                                  'No pending requests — you\'re all caught up!',
+                              icon: Icons.inbox_rounded,
+                            )
+                          else
+                            for (final b in pending.take(3))
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _PendingPreviewCard(
+                                  borrowing: b,
+                                  onApprove: () async {
+                                    HapticFeedback.lightImpact();
+                                    final approved = await ctrl
+                                        .approveBorrowing(b.id);
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          approved
+                                              ? 'Approved: ${b.equipmentName}'
+                                              : 'Could not approve the request. Please try again.',
+                                        ),
+                                        backgroundColor: approved
+                                            ? null
+                                            : PupColors.signalRed,
+                                      ),
+                                    );
+                                  },
+                                  onReject: () async {
+                                    HapticFeedback.lightImpact();
+                                    final rejected = await ctrl.rejectBorrowing(
+                                      b.id,
+                                    );
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          rejected
+                                              ? 'Rejected: ${b.equipmentName}'
+                                              : 'Could not reject the request. Please try again.',
+                                        ),
+                                        backgroundColor: rejected
+                                            ? null
+                                            : PupColors.signalRed,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                          const SizedBox(height: 16),
 
                           // 3-up stats grid (Available / Out / Pending)
                           Row(
@@ -283,78 +371,6 @@ class AdminDashboardScreen extends StatelessWidget {
                                 timestamp: entry.timestamp,
                               ),
                           const SizedBox(height: 18),
-
-                          // Pending requests preview with inline actions
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: _SectionHeader(
-                                  title: 'Pending Requests',
-                                  icon: Icons.hourglass_top_rounded,
-                                  accent: PupColors.cyberAmber,
-                                ),
-                              ),
-                              if (pending.isNotEmpty && onSwitchTab != null)
-                                TextButton(
-                                  onPressed: () => onSwitchTab!(3),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: PupColors.cyberAmber,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: const Text(
-                                    'See all',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (pending.isEmpty)
-                            const EmptyActivityHint(
-                              label:
-                                  'No pending requests — you\'re all caught up!',
-                              icon: Icons.inbox_rounded,
-                            )
-                          else
-                            for (final b in pending.take(3))
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: _PendingPreviewCard(
-                                  borrowing: b,
-                                  onApprove: () {
-                                    HapticFeedback.lightImpact();
-                                    ctrl.approveBorrowing(b.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Approved: ${b.equipmentName}',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  onReject: () {
-                                    HapticFeedback.lightImpact();
-                                    ctrl.rejectBorrowing(b.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Rejected: ${b.equipmentName}',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -419,8 +435,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final color =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final color = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
 
     return Row(
       children: [
@@ -539,10 +554,7 @@ class _OverdueAlert extends StatelessWidget {
                 ),
               ),
               if (onTap != null)
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: subtitleColor,
-                ),
+                Icon(Icons.chevron_right_rounded, color: subtitleColor),
             ],
           ),
         ),
@@ -574,8 +586,9 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final valueColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final valueColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     final card = Container(
       decoration: PupGlass.statCardGlow(
@@ -692,8 +705,9 @@ class _QuickAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     final card = Container(
       decoration: PupGlass.statCardGlow(
@@ -776,8 +790,9 @@ class _PendingPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -919,8 +934,9 @@ class _OccupancyPeekCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -1001,24 +1017,26 @@ class _OccupancyPeekCard extends StatelessWidget {
                     ),
                   ),
                   if (onTap != null)
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: subtle,
-                    ),
+                    Icon(Icons.chevron_right_rounded, color: subtle),
                 ],
               ),
               if (sessions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    // Stacked avatars (max 4)
+                    // Stacked avatars (max 4). Width is explicit because
+                    // the parent Row leaves the cross-axis (width)
+                    // unconstrained — without it, the inner Stack throws
+                    // "A Stack requires bounded constraints" at layout.
                     SizedBox(
+                      // 4 avatars × 22px stride + 32px avatar width =
+                      // 120px worst case. Round up to 124 to keep a hair
+                      // of breathing room.
+                      width: 124,
                       height: 32,
                       child: Stack(
                         children: [
-                          for (int i = 0;
-                              i < sessions.length && i < 4;
-                              i++)
+                          for (int i = 0; i < sessions.length && i < 4; i++)
                             Positioned(
                               left: i * 22.0,
                               child: _PeekAvatar(
@@ -1037,8 +1055,9 @@ class _OccupancyPeekCard extends StatelessWidget {
                                 height: 32,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: PupColors.ashGray
-                                      .withValues(alpha: 0.30),
+                                  color: PupColors.ashGray.withValues(
+                                    alpha: 0.30,
+                                  ),
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: isDark

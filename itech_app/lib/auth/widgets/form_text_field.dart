@@ -16,6 +16,8 @@ class FormTextField extends StatelessWidget {
     this.autovalidateMode = AutovalidateMode.onUserInteraction,
     this.textInputAction,
     this.onSubmitted,
+    this.obscureText = false,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -27,6 +29,8 @@ class FormTextField extends StatelessWidget {
   final AutovalidateMode autovalidateMode;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final bool obscureText;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +38,15 @@ class FormTextField extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         final value = controller.text;
-        final error = validator(value);
+        final error = enabled ? validator(value) : null;
         final showCheck =
-            value.trim().isNotEmpty && error == null;
+            enabled && value.trim().isNotEmpty && error == null;
 
         return TextFormField(
           controller: controller,
+          enabled: enabled,
           keyboardType: keyboardType,
+          obscureText: obscureText,
           validator: validator,
           autovalidateMode: autovalidateMode,
           textInputAction: textInputAction,

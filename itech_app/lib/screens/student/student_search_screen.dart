@@ -16,6 +16,8 @@ import '../../student/search/widgets/results_list.dart';
 import '../../student/search/widgets/sort_bottom_sheet.dart';
 import '../../student/search/widgets/view_toggle_row.dart';
 import '../../student/search/widgets/voice_search_overlay.dart';
+import '../../app/language_controller.dart';
+import '../../student/search/widgets/borrow_confirm_sheet.dart';
 
 class StudentSearchScreen extends StatefulWidget {
   const StudentSearchScreen({super.key});
@@ -46,6 +48,7 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
       create: (_) => StudentSearchController(storage: RecentSearchStorage()),
       builder: (context, _) {
         final ctrl = context.watch<StudentSearchController>();
+        final language = context.watch<LanguageController>().language;
 
         // Keep controller in sync (one-way from TextField to ctrl)
         if (_searchC.text != ctrl.query) {
@@ -199,9 +202,14 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
                         _searchC.text = t;
                         ctrl.setQuery(t);
                       },
+                      onPartialTranscribed: (t) {
+                        _searchC.text = t;
+                        ctrl.setQuery(t);
+                      },
                       onCancel: () {
                         setState(() => _showVoice = false);
                       },
+                      language: language,
                     ),
                   ),
               ],
@@ -232,71 +240,14 @@ class _ResultsBody extends StatelessWidget {
       );
     }
 
-    void onBorrow(Equipment e) {
-      showModalBottomSheet(
-        context: context,
-        showDragHandle: true,
-        backgroundColor: Colors.white,
-        builder: (context) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Borrow ${e.name}?',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: PupColors.slateGray,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${e.id} • ${e.location}',
-                  style: TextStyle(
-                    color: PupColors.ashGray,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: PupColors.cyberAmber,
-                          foregroundColor: const Color(0xFF1B1B1B),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Borrow request submitted for ${e.name}',
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Borrow'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      );
+    void onBorrow(Equipment e) async {
+      // The sheet handles its own DB write via the dashboard controller.
+      // We just pop the success/error UI when it returns.
+      final created = await BorrowConfirmSheet.show(context, equipment: e);
+      if (!context.mounted) return;
+      if (created != null) {
+        showBorrowSuccessSnackBar(context, created.equipmentName);
+      }
     }
 
     void onTapEquipment(Equipment e) {

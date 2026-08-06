@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show IconData, Color;
 
 enum BorrowingStatus {
   pending,
@@ -234,4 +235,34 @@ class AppNotification {
       isRead: isRead ?? this.isRead,
     );
   }
+}
+
+/// Which audience a log entry is meant for. The same activity feed is
+/// rendered on the student home ("Recently Borrowed") and the admin
+/// dashboard ("Recent Activity"), so we tag each entry with the scope it
+/// belongs to and filter on the consumer side.
+enum ActivityScope { student, admin }
+
+/// A single entry in the local "activity" log. The log itself isn't
+/// persisted to Supabase yet — the controller appends one of these
+/// every time it performs a CRUD op (return, approve, reject, ...) so
+/// the home / dashboard feeds stay in sync with whatever the user just
+/// did without an extra round-trip.
+@immutable
+class ActivityEntry {
+  const ActivityEntry({
+    required this.icon,
+    required this.tone,
+    required this.title,
+    required this.subtitle,
+    required this.timestamp,
+    required this.scope,
+  });
+
+  final IconData icon;
+  final Color tone;
+  final String title;
+  final String subtitle;
+  final DateTime timestamp;
+  final ActivityScope scope;
 }

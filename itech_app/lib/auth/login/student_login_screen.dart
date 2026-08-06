@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import '../session/auth_session_storage.dart';
 import '../../theme/design_tokens.dart';
 import '../validators/auth_validators.dart';
 import '../widgets/biometric_button.dart';
@@ -45,7 +47,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
     setState(() {
       _studentId.text = saved.studentId;
-      _password.text = saved.password;
       _rememberMe = saved.rememberMe;
       _lastLogin = lastLogin;
       // The username is the "short" form (e.g. juandelacruz); we surface
@@ -97,7 +98,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     if (raw.contains('user not found') || raw.contains('no user')) {
       return 'No account with that student ID.';
     }
-    return 'Login failed. Please try again.';
+    const setupHint =
+        'Confirm this account exists and is confirmed in '
+        'Supabase Authentication.';
+    if (kDebugMode) return 'Unable to sign in: $error. $setupHint';
+    return 'Unable to sign in. $setupHint';
   }
 
   Future<void> _submit() async {
@@ -112,7 +117,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
     try {
       await authSessionStorage.signInStudent(
-        studentId: _studentId.text.trim(),
+        identifier: _studentId.text.trim(),
         password: _password.text,
         rememberMe: _rememberMe,
       );
@@ -147,10 +152,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           child: TextFormField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: 'Student ID',
-              hintText: 'e.g., 2024-08721-MN-0',
+              labelText: 'Student ID or PUP email',
+              hintText: 'e.g., 2024-08721-MN-0 or student1@pup.edu.ph',
             ),
-            validator: AuthValidators.validateStudentId,
+            validator: AuthValidators.validateStudentLogin,
           ),
         ),
         actions: [
@@ -161,8 +166,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           FilledButton(
             onPressed: () async {
               if (!(formKey.currentState?.validate() ?? false)) return;
-              final id = controller.text.trim().toLowerCase();
-              final email = '$id@pupitech.local';
+              final email = AuthSessionStorage.studentAuthEmailFor(
+                controller.text,
+              );
               try {
                 await Supabase.instance.client.auth.resetPasswordForEmail(
                   email,
@@ -206,7 +212,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         ? ' • Last login ${_formatRelative(_lastLogin!)}'
         : '';
     final greetingSub = _rememberedName != null
-        ? 'Your last session is loaded below — just tap Login to continue.$lastLoginSuffix'
+        ? 'Your account is remembered. Enter your password to continue.$lastLoginSuffix'
         : 'Use your PUP credentials to borrow and return equipment.';
 
     return Scaffold(
@@ -227,10 +233,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                   const Spacer(),
                   TextButton.icon(
                     onPressed: () => context.go('/admin/login'),
-                    icon: const Icon(
-                      Icons.shield_outlined,
-                      size: 16,
-                    ),
+                    icon: const Icon(Icons.shield_outlined, size: 16),
                     label: const Text('Faculty / Admin'),
                     style: TextButton.styleFrom(
                       foregroundColor: PupColors.pupMaroon,
@@ -274,10 +277,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                     children: [
                       FormTextField(
                         controller: _studentId,
-                        label: 'Student ID',
-                        hint: 'e.g., 2024-08721-MN-0',
+                        label: 'Student ID or PUP email',
+                        hint: 'e.g., 2024-08721-MN-0 or student1@pup.edu.ph',
                         icon: Icons.credit_card_rounded,
-                        validator: AuthValidators.validateStudentId,
+                        validator: AuthValidators.validateStudentLogin,
                         textInputAction: TextInputAction.next,
                       ),
                       const SizedBox(height: 12),
@@ -305,6 +308,45 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                         accent: PupColors.cyberAmber,
                         foreground: const Color(0xFF1B1B1B),
                         onPressed: _loading ? null : _submit,
+                      ),
+                      const SizedBox(height: 10),
+                      // Inline link to the sign-up flow so a brand-new
+                      // student doesn't have to back out to /role to
+                      // find the "Create account" entry point.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Don't have an account?",
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.7)
+                                  : PupColors.ashGray,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => context.go('/student/signup'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: PupColors.techCyan,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Create one',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -345,10 +387,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              BiometricLoginRow(
-                onBiometric: () {},
-                onScan: () {},
-              ),
+              BiometricLoginRow(onBiometric: () {}, onScan: () {}),
             ],
           ),
         ),

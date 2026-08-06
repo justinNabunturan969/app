@@ -33,6 +33,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local Supabase runtime configuration. Keep real credentials on your machine.
+supabase.json
+
 # Symbolication related
 app.*.symbols
 

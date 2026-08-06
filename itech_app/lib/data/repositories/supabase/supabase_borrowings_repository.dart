@@ -26,7 +26,9 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     // Pick whichever timestamp the row has. Pending requests have only
     // requested_at, active loans have borrowed_at/due_at, history has
     // returned_at.
-    final requestedAt = DateTime.tryParse((row['requested_at'] as String?) ?? '');
+    final requestedAt = DateTime.tryParse(
+      (row['requested_at'] as String?) ?? '',
+    );
     final borrowedAt = DateTime.tryParse((row['borrowed_at'] as String?) ?? '');
     final dueAt = DateTime.tryParse((row['due_at'] as String?) ?? '');
     final returnedAt = DateTime.tryParse((row['returned_at'] as String?) ?? '');
@@ -108,32 +110,50 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   }
 
   @override
+  Future<Borrowing> create({
+    required String equipmentId,
+    String? purpose,
+  }) async {
+    final row = await _client.rpc(
+      'request_borrowing',
+      params: {'p_equipment_id': equipmentId, 'p_purpose': purpose ?? ''},
+    );
+    return _loadRpcBorrowing(row);
+  }
+
+  @override
   Future<void> returnBorrowing(String id) async {
-    await _client.from('borrowings').update({
-      'status': 'returned',
-      'returned_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+    await _client.rpc(
+      'transition_borrowing',
+      params: {'p_borrowing_id': id, 'p_action': 'request_return'},
+    );
   }
 
   @override
   Future<void> approve(String id) async {
-    final now = DateTime.now();
-    // 3-day default loan period. Wire this to your real policy later.
-    final due = now.add(const Duration(days: 3));
-    await _client.from('borrowings').update({
-      'status': 'active',
-      'approved_at': now.toIso8601String(),
-      'borrowed_at': now.toIso8601String(),
-      'due_at': due.toIso8601String(),
-      'approved_by': _client.auth.currentUser?.id,
-    }).eq('id', id);
+    await _client.rpc(
+      'transition_borrowing',
+      params: {'p_borrowing_id': id, 'p_action': 'approve'},
+    );
   }
 
   @override
   Future<void> reject(String id) async {
-    await _client.from('borrowings').update({
-      'status': 'rejected',
-      'returned_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+    await _client.rpc(
+      'transition_borrowing',
+      params: {'p_borrowing_id': id, 'p_action': 'reject'},
+    );
+  }
+
+  Future<Borrowing> _loadRpcBorrowing(dynamic row) async {
+    final id = switch (row) {
+      {'id': final String id} => id,
+      [{'id': final String id}, ...] => id,
+      _ => null,
+    };
+    if (id == null) throw StateError('Borrowing action returned no record.');
+    final borrowing = await getById(id);
+    if (borrowing == null) throw StateError('Borrowing record was not found.');
+    return borrowing;
   }
 }

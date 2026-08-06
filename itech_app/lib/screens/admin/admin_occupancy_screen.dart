@@ -42,14 +42,14 @@ class AdminOccupancyScreen extends StatelessWidget {
             bottom: false,
             child: RefreshIndicator(
               onRefresh: () async {
-                // Surface a manual refresh; the rotator is on its own
-                // schedule, but a pull always rebuilds with fresh timers.
-                await Future<void>.delayed(
-                  const Duration(milliseconds: 350),
-                );
-                if (context.mounted) {
-                  (context as Element).markNeedsBuild();
-                }
+                // Pull-to-refresh hits the actual `active_sessions`
+                // table on Supabase. Until that returns, keep a small
+                // floor delay so the indicator has a moment to breathe
+                // even on a near-instant response.
+                await Future.wait([
+                  ctrl.loadActiveSessions(),
+                  Future<void>.delayed(const Duration(milliseconds: 350)),
+                ]);
               },
               color: PupColors.mintGreen,
               backgroundColor: theme.colorScheme.surface,

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/repository_bundle.dart';
+import '../../app/language_controller.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/responsive_scaffold.dart';
 
 import '../student/student_borrowings_screen.dart';
 import '../student/student_home_screen.dart';
@@ -20,21 +23,51 @@ class StudentShell extends StatefulWidget {
 class _StudentShellState extends State<StudentShell> {
   int index = 0;
 
-  static const tabs = [
-    _TabSpec('Home', Icons.home_rounded, 0),
-    _TabSpec('Analytics', Icons.analytics_rounded, 1),
-    _TabSpec('Borrowings', Icons.history_rounded, 2),
-    _TabSpec('Profile', Icons.person_rounded, 3),
-    _TabSpec('Notifications', Icons.notifications_rounded, 4),
+  static List<ShellTab> _tabs(AppCopy copy) => [
+    ShellTab(
+      label: copy.home,
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+    ),
+    ShellTab(
+      label: copy.analytics,
+      icon: Icons.analytics_outlined,
+      selectedIcon: Icons.analytics_rounded,
+    ),
+    ShellTab(
+      label: copy.borrowings,
+      icon: Icons.history_rounded,
+      selectedIcon: Icons.history_rounded,
+    ),
+    ShellTab(
+      label: copy.profile,
+      icon: Icons.person_outline_rounded,
+      selectedIcon: Icons.person_rounded,
+    ),
+    ShellTab(
+      label: copy.notifications,
+      icon: Icons.notifications_none_rounded,
+      selectedIcon: Icons.notifications_rounded,
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => StudentDashboardController(),
+    return ChangeNotifierProvider<StudentDashboardController>(
+      create: (ctx) =>
+          StudentDashboardController(bundle: ctx.read<RepositoryBundle>())
+            ..load(),
       builder: (context, _) {
         final ctrl = context.watch<StudentDashboardController>();
-        return Scaffold(
+        final copy = AppCopy(context.watch<LanguageController>().language);
+        return ResponsiveScaffold(
+          currentIndex: index,
+          tabs: _tabs(copy),
+          unreadCount: ctrl.unreadCount,
+          onTabTap: (i) {
+            if (i == index) return;
+            setState(() => index = i);
+          },
           body: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             switchInCurve: Curves.easeOut,
@@ -42,28 +75,16 @@ class _StudentShellState extends State<StudentShell> {
             transitionBuilder: (child, animation) {
               return FadeTransition(opacity: animation, child: child);
             },
-            child: _pageForIndex(index),
-          ),
-          bottomNavigationBar: _BottomStudentNav(
-            currentIndex: index,
-            tabs: tabs,
-            unreadCount: ctrl.unreadCount,
-            onTap: (i) {
-              if (i == index) return;
-              // Light vibration/haptic on tab switch (safe prototype)
-              // On some platforms the haptic API may not be available, so keep it optional.
-              try {
-                // ignore: deprecated_member_use
-                // ignore: invalid_use_of_protected_member
-                // ignore: unnecessary_statements
-                // Haptic feedback not used in this repo build yet.
-                // (Call your preferred haptics plugin here once configured.)
-              } catch (_) {
-                // no-op
-              }
-
-              setState(() => index = i);
-            },
+            child: _ShellBody(
+              loading: ctrl.loading,
+              error: ctrl.error,
+              hasData:
+                  ctrl.equipment.isNotEmpty ||
+                  ctrl.activeBorrowings.isNotEmpty ||
+                  ctrl.notifications.isNotEmpty,
+              onRetry: ctrl.load,
+              page: _pageForIndex(index),
+            ),
           ),
         );
       },
@@ -89,104 +110,122 @@ class _StudentShellState extends State<StudentShell> {
   }
 }
 
-class _TabSpec {
-  const _TabSpec(this.label, this.icon, this.index);
-
-  final String label;
-  final IconData icon;
-  final int index;
-}
-
-class _BottomStudentNav extends StatelessWidget {
-  const _BottomStudentNav({
-    required this.currentIndex,
-    required this.tabs,
-    required this.onTap,
-    required this.unreadCount,
+/// Wraps a tab page with a top-level loading and error state. We only
+/// show the loading spinner on the *initial* load (when there's no data
+/// to display yet) so the user doesn't see a flash of empty content.
+/// Once the first load completes, refreshes go through the per-screen
+/// RefreshIndicator instead, which gives a much less jarring UX.
+class _ShellBody extends StatelessWidget {
+  const _ShellBody({
+    required this.loading,
+    required this.error,
+    required this.hasData,
+    required this.onRetry,
+    required this.page,
   });
 
-  final int currentIndex;
-  final List<_TabSpec> tabs;
-  final ValueChanged<int> onTap;
-  final int unreadCount;
+  final bool loading;
+  final String? error;
+  final bool hasData;
+  final Future<void> Function() onRetry;
+  final Widget page;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && !hasData) {
+      return const _LoadingScaffold();
+    }
+    if (error != null && !hasData) {
+      return _ErrorScaffold(message: error!, onRetry: onRetry);
+    }
+    if (error != null) {
+      // Soft error: keep the page on screen but show a thin banner at the
+      // top so the user knows a refresh would be a good idea.
+      return Column(
+        children: [
+          _ErrorBanner(message: error!, onRetry: onRetry),
+          Expanded(child: page),
+        ],
+      );
+    }
+    return page;
+  }
+}
+
+class _LoadingScaffold extends StatelessWidget {
+  const _LoadingScaffold();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final navBg = isDark
-        ? PupColors.deepMahogany.withValues(alpha: 0.78)
-        : PupColors.lightCardAlt.withValues(alpha: 0.92);
-
-    // Light mode → red active item; dark mode → amber (unchanged).
-    final activeColor =
-        isDark ? PupColors.cyberAmber : PupColors.signalRed;
-
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(22),
-        topRight: Radius.circular(22),
-      ),
-      child: BottomNavigationBarTheme(
-        data: Theme.of(context).bottomNavigationBarTheme,
-        child: Container(
-          color: navBg,
-          child: SafeArea(
-            top: false,
-            child: BottomNavigationBar(
-              type: BottomNavigationBarType.fixed,
-              currentIndex: currentIndex,
-              onTap: onTap,
-              backgroundColor: Colors.transparent,
-              elevation: 8,
-              items: tabs.map((t) {
-                final selected = t.index == currentIndex;
-                final color = selected
-                    ? activeColor
-                    : (isDark
-                          ? PupColors.ashGray
-                          : PupColors.ashGray.withValues(alpha: 0.75));
-
-                Widget icon = _AnimatedNavIcon(
-                  icon: t.icon,
-                  color: color,
-                  selected: selected,
-                  activeColor: activeColor,
-                );
-
-                if (t.label == 'Notifications' && unreadCount > 0) {
-                  icon = Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      icon,
-                      Positioned(
-                        top: -6,
-                        right: -10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: PupColors.signalRed,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            unreadCount > 9 ? '9+' : '$unreadCount',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                return BottomNavigationBarItem(icon: icon, label: t.label);
-              }).toList(),
+    final tint = isDark ? PupColors.cyberAmber : PupColors.signalRed;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: tint),
+            const SizedBox(height: 14),
+            Text(
+              'Loading from Supabase…',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).hintColor,
+                letterSpacing: 0.3,
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorScaffold extends StatelessWidget {
+  const _ErrorScaffold({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.cloud_off_rounded,
+                size: 56,
+                color: PupColors.signalRed,
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "Couldn't reach the database",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       ),
@@ -194,70 +233,43 @@ class _BottomStudentNav extends StatelessWidget {
   }
 }
 
-class _AnimatedNavIcon extends StatelessWidget {
-  const _AnimatedNavIcon({
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.activeColor,
-  });
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, required this.onRetry});
 
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final Color activeColor;
+  final String message;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.elasticOut,
-      transform: Matrix4.identity()
-        ..translateByDouble(0.0, selected ? -5.0 : 0.0, 0.0, 1.0)
-        ..scaleByDouble(selected ? 1.1 : 1.0, selected ? 1.1 : 1.0, 1.0, 1.0),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (selected)
-            Positioned(
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: isDark
-                      ? [
-                          BoxShadow(
-                            color: PupColors.cyberAmber.withValues(alpha: 0.30),
-                            blurRadius: 24,
-                            spreadRadius: 3,
-                          ),
-                          BoxShadow(
-                            color: PupColors.cyberAmber.withValues(alpha: 0.15),
-                            blurRadius: 12,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : [
-                          // Light mode glow follows the (red) active color.
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.12),
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.06),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          ),
-                        ],
+    return Material(
+      color: PupColors.signalRed.withValues(alpha: 0.10),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 18,
+                color: PupColors.signalRed,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          Icon(icon, color: color, size: 26),
-        ],
+              TextButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
+          ),
+        ),
       ),
     );
   }

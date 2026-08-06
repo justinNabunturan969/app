@@ -2,37 +2,33 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "itech_app (Windows)",
+      "name": "PUP-ITech (Windows)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "args": [
-        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
-        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+        "--dart-define-from-file=supabase.json"
       ]
     },
     {
-      "name": "itech_app (Chrome)",
+      "name": "PUP-ITech (Chrome)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "chrome",
       "args": [
-        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
-        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+        "--dart-define-from-file=supabase.json"
       ]
     },
     {
-      "name": "itech_app (Edge)",
+      "name": "PUP-ITech (Edge)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "edge",
       "args": [
-        "--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
-        "--dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY"
+        "--dart-define-from-file=supabase.json"
       ]
     }
   ]
 }
-

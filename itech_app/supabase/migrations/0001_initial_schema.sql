@@ -115,20 +115,36 @@ create index if not exists notifications_recipient_idx
 -- =============================================================================
 
 -- Auto-create a profiles row whenever a new auth user is created.
+-- Reads `student_id` and `full_name` from raw_user_meta_data so the
+-- in-app "Create Account" screen can pass them through at sign-up
+-- time. Falls back to the email local-part for the display name when
+-- the client doesn't send one.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_full_name   text;
+  v_student_id  text;
 begin
-  insert into public.profiles (id, email, full_name)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1))
-  )
-  on conflict (id) do nothing;
+  v_full_name := coalesce(
+    new.raw_user_meta_data ->> 'full_name',
+    split_part(new.email, '@', 1)
+  );
+  v_student_id := nullif(
+    btrim(new.raw_user_meta_data ->> 'student_id'),
+    ''
+  );
+
+  insert into public.profiles (id, email, full_name, student_id)
+  values (new.id, new.email, v_full_name, v_student_id)
+  on conflict (id) do update set
+    email      = excluded.email,
+    full_name  = coalesce(excluded.full_name, public.profiles.full_name),
+    student_id = coalesce(excluded.student_id, public.profiles.student_id);
+
   return new;
 end;
 $$;
@@ -160,6 +176,129 @@ create trigger on_auth_user_session
   after insert on auth.users
   for each row execute function public.handle_new_session();
 
+-- -------------------------------------------------------------------
+-- Auto-fire a notification AND keep `equipment.available_count` in
+-- sync whenever a borrowing's status changes. Two birds, one trigger:
+--   1. Status -> notification: the student sees a "request approved"
+--      / "rejected" / "return confirmed" / "overdue" entry on their
+--      notifications tab without the app having to do it.
+--   2. Status -> equipment count: when the admin approves a request
+--      we decrement available_count; when the student returns it we
+--      increment it. Without this, the home-screen cards would keep
+--      showing "5 available" even when 3 are physically checked out.
+--
+-- `security definer` so the notification insert can bypass the
+-- `notifications_insert_self` RLS policy (the policy was written for
+-- the student driving the insert from the app; the trigger is being
+-- fired by the admin's update, so it needs the higher privilege).
+-- -------------------------------------------------------------------
+create or replace function public.handle_borrowing_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_equipment_name text;
+  v_student_name   text;
+  v_student_number text;
+  v_title          text;
+  v_body           text;
+  v_type           text;
+begin
+  -- No-op if the status didn't actually change (admin updated e.g. notes
+  -- or due_at without touching status). Saves us a notification storm.
+  if OLD.status is not distinct from NEW.status then
+    return new;
+  end if;
+
+  -- Map status -> (notification type, title, body). The 'pending' status
+  -- is intentionally excluded — the student just made the request, they
+  -- don't need a notification telling themselves about it.
+  if NEW.status in ('approved', 'active', 'rejected', 'returned', 'overdue') then
+    case NEW.status
+      when 'approved' then
+        v_type  := 'approved';
+        v_title := 'Request approved';
+        v_body  := 'Your borrowing request has been approved. You can pick up the equipment.';
+      when 'active' then
+        v_type  := 'approved';
+        v_title := 'Equipment ready for pickup';
+        v_body  := 'Your equipment is now active and ready for use.';
+      when 'rejected' then
+        v_type  := 'rejected';
+        v_title := 'Request rejected';
+        v_body  := 'Your borrowing request was rejected. Contact admin for details.';
+      when 'returned' then
+        v_type  := 'returned';
+        v_title := 'Return confirmed';
+        v_body  := 'Your equipment return has been recorded. Thanks!';
+      when 'overdue' then
+        v_type  := 'overdue';
+        v_title := 'Equipment overdue';
+        v_body  := 'Your borrowed equipment is overdue. Please return it as soon as possible.';
+    end case;
+
+    -- Resolve the equipment name once so the title reads nicely. If the
+    -- equipment row was deleted between request and approval, the title
+    -- falls back to "your item" — still informative, no NULLs.
+    select name into v_equipment_name
+      from public.equipment
+     where id = NEW.equipment_id;
+
+    insert into public.notifications (recipient_id, type, title, body)
+    values (
+      NEW.student_id,
+      v_type,
+      v_title || ' — ' || coalesce(v_equipment_name, 'your item'),
+      v_body
+    );
+
+    -- A return performed by the borrower is also a return request for the
+    -- equipment desk. Notify every admin, but do not create that alert when
+    -- an admin records the physical return through the scan screen.
+    if NEW.status = 'returned' and auth.uid() = NEW.student_id then
+      select full_name, student_id
+        into v_student_name, v_student_number
+        from public.profiles
+       where id = NEW.student_id;
+
+      insert into public.notifications (recipient_id, type, title, body)
+      select
+        id,
+        'reminder',
+        'Return requested — ' || coalesce(v_equipment_name, 'equipment'),
+        coalesce(v_student_name, 'A student') ||
+          case when v_student_number is null then '' else ' (' || v_student_number || ')' end ||
+          ' marked this item for return. Please verify the physical return.'
+      from public.profiles
+      where role = 'admin';
+    end if;
+  end if;
+
+  -- Adjust equipment.available_count based on the status transition.
+  -- GREATEST(..., 0) is a defensive floor so a double-approve can't
+  -- drive the count negative; LEAST(..., total_count) caps the upper
+  -- end so we never advertise more than physically exists.
+  if NEW.status = 'active' and OLD.status <> 'active' then
+    update public.equipment
+       set available_count = greatest(available_count - 1, 0)
+     where id = NEW.equipment_id;
+  elsif NEW.status = 'returned' and OLD.status <> 'returned' then
+    update public.equipment
+       set available_count = least(available_count + 1, total_count)
+     where id = NEW.equipment_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_borrowing_status_change on public.borrowings;
+create trigger on_borrowing_status_change
+  after update on public.borrowings
+  for each row execute function public.handle_borrowing_status_change();
+
 -- =============================================================================
 -- Row Level Security
 -- =============================================================================
@@ -184,6 +323,27 @@ as $$
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
   );
+$$;
+
+-- Helper: look up the auth email that corresponds to a given student_id.
+-- Runs as the function owner (security definer) so it can read the
+-- profiles table even when the caller isn't signed in yet — exactly
+-- what the student login flow needs to translate "I typed my student
+-- ID" into "I need to sign in with this PUP webmail". Returns NULL
+-- when no profile matches so the caller can show a clean "no such
+-- account" error without leaking which student IDs exist.
+create or replace function public.auth_email_for_student_id(lookup_id text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select email
+    from public.profiles
+   where student_id = lookup_id
+   order by created_at
+   limit 1;
 $$;
 
 -- profiles
@@ -242,14 +402,60 @@ create policy "notifications_update_own"
   on public.notifications for update
   using (recipient_id = auth.uid());
 
+-- Students can insert notifications addressed to themselves (used by the
+-- in-app "Restore" / undo flow when you accidentally delete one). Without
+-- this, the RLS default-deny silently blocks the restore write.
+drop policy if exists "notifications_insert_self" on public.notifications;
+create policy "notifications_insert_self"
+  on public.notifications for insert
+  with check (recipient_id = auth.uid());
+
+-- A user can delete their own notifications. Admins keep the implicit
+-- postgres-superuser path for moderation; no app surface needs an admin
+-- delete-notifications button today.
+drop policy if exists "notifications_delete_own" on public.notifications;
+create policy "notifications_delete_own"
+  on public.notifications for delete
+  using (recipient_id = auth.uid());
+
 -- =============================================================================
 -- Realtime — publish changes for the live UI
 -- =============================================================================
 -- The Flutter app listens on these channels via supabase.channel(...).stream.
-alter publication supabase_realtime add table public.equipment;
-alter publication supabase_realtime add table public.borrowings;
-alter publication supabase_realtime add table public.active_sessions;
-alter publication supabase_realtime add table public.notifications;
+-- PostgreSQL does not support `ADD TABLE IF NOT EXISTS` for publications, so
+-- guard each table explicitly. This keeps the migration safe to re-run after
+-- a partial setup or a previous successful run.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'equipment',
+    'borrowings',
+    'active_sessions',
+    'notifications'
+  ] loop
+    if not exists (
+      select 1
+      from pg_publication_rel publication_relation
+      join pg_publication publication
+        on publication.oid = publication_relation.prpubid
+      join pg_class relation
+        on relation.oid = publication_relation.prrelid
+      join pg_namespace schema
+        on schema.oid = relation.relnamespace
+      where publication.pubname = 'supabase_realtime'
+        and schema.nspname = 'public'
+        and relation.relname = table_name
+    ) then
+      execute format(
+        'alter publication supabase_realtime add table public.%I',
+        table_name
+      );
+    end if;
+  end loop;
+end
+$$;
 
 -- =============================================================================
 -- Done. Test the install:

@@ -19,7 +19,7 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
       type: _parseType((row['type'] as String?) ?? 'reminder'),
       timestamp:
           DateTime.tryParse((row['created_at'] as String?) ?? '') ??
-              DateTime.now(),
+          DateTime.now(),
       isRead: (row['is_read'] as bool?) ?? false,
     );
   }
@@ -49,6 +49,22 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
         .select()
         .order('created_at', ascending: false);
     return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Stream<List<AppNotification>> watch() {
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) return const Stream.empty();
+
+    return _client
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('recipient_id', uid)
+        .map((rows) {
+          final notifications = rows.map(_fromRow).toList();
+          notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          return List<AppNotification>.unmodifiable(notifications);
+        });
   }
 
   @override

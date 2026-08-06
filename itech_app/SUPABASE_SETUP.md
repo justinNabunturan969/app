@@ -23,6 +23,22 @@ the project up. This file walks you through the whole thing.
    creates tables, indexes, triggers, and RLS policies, none of which return
    rows.
 
+The migration is safe to run again. If a prior run stopped at the Realtime
+section with an “already member of publication” error, pull the latest version
+of this file and run the complete script again.
+
+### Existing projects: apply later migrations
+
+If you had already run `0001_initial_schema.sql` before adding live
+notifications and student return requests, also run
+`supabase/migrations/0002_live_notifications_and_return_requests.sql` in the
+SQL Editor. It upgrades the notification trigger without deleting data.
+
+Then run `supabase/migrations/0003_security_hardening_and_audit.sql`. This is
+required before using the current app build: it protects profile roles, moves
+borrowing approval/return actions into secure database functions, prevents
+duplicate open requests, and adds an admin-only audit log.
+
 To verify it worked, run this in the SQL editor:
 
 ```sql
@@ -56,18 +72,26 @@ update public.profiles set role = 'admin'
 Or, to pre-create a test user with a known password:
 
 1. Dashboard → **Authentication** → **Users** → **Add user** → **Create new user**.
-2. Email: `student1@pupitech.local` · Password: `password123` · "Auto Confirm User" ✅
-3. Repeat for an admin: `admin@pupitech.local` / `password123`.
+2. Student email: `student1@pup.edu.ph` · choose a password · "Auto Confirm User" ✅
+3. Repeat for an admin: `admin1@pup.edu.ph` · choose a password · "Auto Confirm User" ✅.
 4. Then in the SQL editor:
 
 ```sql
 update public.profiles set role = 'admin', full_name = 'Demo Admin'
-  where email = 'admin@pupitech.local';
+  where email = 'admin1@pup.edu.ph';
 
-update public.profiles set role = 'student', full_name = 'Juan dela Cruz',
-  student_id = '2024-04421-MN-0', program = 'BS CpE'
-  where email = 'student1@pupitech.local';
+update public.profiles set role = 'student', full_name = 'Jefferson Bading',
+  student_id = '2024-12345-MN-0', program = 'DCPET'
+  where email = 'student1@pup.edu.ph';
 ```
+
+> **Why this matters:** the admin sign-in itself works, but every admin
+> action (approve / reject / return / view all borrowings) checks the
+> `is_admin()` SQL helper, which reads `profiles.role`. The default is
+> `'student'`, so a freshly-created admin user is actually a student in
+> the DB's eyes until you run that `update`. The end-user symptom is
+> "the buttons do nothing" — the controller sees the RLS deny as an
+> exception and shows a red banner.
 
 ## 5. Seed some equipment (optional, for the demo)
 
@@ -105,13 +129,25 @@ telling you exactly which flag is missing.
 | File | What it does |
 |---|---|
 | `lib/env/supabase_config.dart` | Reads `--dart-define` and asserts they're set. |
-| `lib/main.dart` | Initializes Supabase before `runApp`. |
+| `lib/main.dart` | Initializes Supabase, builds a `RepositoryBundle.fromSupabase()`, and provides it to the app via `Provider<RepositoryBundle>.value(...)`. |
 | `lib/auth/session/auth_session_storage.dart` | Thin wrapper over Supabase Auth. The login screens still call `saveStudentSession` / `saveAdminSession` — those now do `supabase.auth.signInWithPassword` under the hood. |
-| `lib/data/repositories/repository_bundle.dart` | Has both `RepositoryBundle.mock()` (existing) and `RepositoryBundle.fromSupabase()` (new). Swap in your `main.dart` to switch. |
+| `lib/data/repositories/repository_bundle.dart` | Has both `RepositoryBundle.mock()` (offline demo) and `RepositoryBundle.fromSupabase()` (live DB). `main.dart` wires the Supabase one in by default. |
 | `lib/data/repositories/supabase/*.dart` | The four Supabase-backed repositories. |
+| `lib/student/student_dashboard_controller.dart` | The single controller used by both shells. Constructor takes a `RepositoryBundle`; `load()` fetches every list (equipment, 4 borrowing buckets, notifications, profile) in parallel via `Future.wait`; CRUD methods (return/approve/reject/markRead/clearAll/...) write to Supabase first and only update local state on success. |
+| `lib/screens/shell/student_shell.dart` / `admin_shell.dart` | Read the bundle from the provider tree, hand it to the controller, kick off `load()` on startup, and show a loading spinner / error banner while the first fetch is in flight. |
 | `supabase/migrations/0001_initial_schema.sql` | The full DB schema with RLS. Run it once. |
+| `supabase/seed_admin_and_demo.sql` | One-shot helper: promotes the admin profile's role, fills in student profile fields, and (optionally) inserts a pending borrowing + notification so the first launch has content to display. |
 
 ## What you get out of the box
+
+- **Status-change side effects** — a PostgreSQL trigger on `borrowings`
+  fires whenever a row's `status` flips. It (a) auto-inserts a
+  `notifications` row for the student so the in-app inbox lights up the
+  moment an admin approves/rejects a request, and (b) keeps
+  `equipment.available_count` in sync so the home-screen cards don't
+  lie about how many items are actually free. SECURITY DEFINER so the
+  notification insert bypasses RLS, since it's being fired by the
+  admin's update, not the student's session.
 
 - **Auth** — sign in / out via Supabase. Sessions persist across launches.
 - **Postgres** — your data lives in real tables, with foreign keys and indexes.
@@ -134,22 +170,32 @@ telling you exactly which flag is missing.
 
 ## Switching between mock data and Supabase
 
-In `lib/main.dart`, change:
+`lib/main.dart` already builds the Supabase-backed bundle by default. If you want to demo the app without a network round-trip (e.g. on the train, in front of panelists when WiFi is shaky), flip the two lines:
 
 ```dart
-// before — in-memory mock data, no backend
-final bundle = RepositoryBundle.mock();
+// default in main.dart — real Supabase backend
+late final RepositoryBundle repositoryBundle = RepositoryBundle.fromSupabase();
 
-// after — real Supabase backend
-final bundle = RepositoryBundle.fromSupabase();
+// offline demo — same in-memory data the original prototype used
+// late final RepositoryBundle repositoryBundle = RepositoryBundle.mock();
 ```
 
 You can keep both, gated by an environment flag, so you can demo either mode
 during your defense.
 
-## Production checklist (before going live, not needed for thesis)
+## Production checklist (before going live)
 
-- Enable **email confirmations** in Auth settings.
+- Enable **email confirmations** in **Authentication → Providers → Email**.
+- Set the **Site URL** and allowed redirect URLs for your deployed website and
+  mobile deep link; test a confirmation link on a real phone.
+- Enable **CAPTCHA protection** and sensible auth rate limits in
+  **Authentication → Attack protection**.
+- Require **MFA for administrator accounts** in Supabase Auth and keep the
+  recovery codes in the equipment office's controlled records.
+- Use a strong password policy (12+ characters) in **Authentication → Password
+  security**. The app intentionally does not save passwords for “Remember me”.
+- Promote an admin only in the SQL Editor or a server-side service using the
+  service-role key. Never put the service-role key in this Flutter app.
 - Configure **password recovery** email template.
 - Add a **favorites** table so the heart icon persists server-side.
 - Add an `equipment_likes (profile_id, equipment_id)` table with RLS:
@@ -165,7 +211,8 @@ during your defense.
   update public.borrowings set status = 'overdue'
     where status = 'active' and due_at < now();
   ```
-- Lock down RLS further: require admins to come from a specific domain.
+- Review the `borrowing_audit_log` table regularly; it records all request,
+  approval, rejection, and return transitions.
 - Turn on **automatic backups** (paid plan only).
 
 ---

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -43,7 +44,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     setState(() {
       _facultyUsername.text = saved.facultyUsername;
-      _password.text = saved.password;
       _rememberMe = saved.rememberMe;
       _rememberedUser = saved.facultyUsername.isNotEmpty
           ? saved.facultyUsername[0].toUpperCase() +
@@ -79,7 +79,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     if (raw.contains('rate limit') || raw.contains('too many')) {
       return 'Too many attempts. Wait a minute and try again.';
     }
-    return 'Login failed. Please try again.';
+    const setupHint =
+        'Confirm this account exists and is confirmed in '
+        'Supabase Authentication.';
+    if (kDebugMode) return 'Unable to sign in: $error. $setupHint';
+    return 'Unable to sign in. $setupHint';
   }
 
   Future<void> _submit() async {
@@ -128,7 +132,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         ? 'Welcome back, $_rememberedUser'
         : 'Faculty / Admin';
     final greetingSub = _rememberedUser != null
-        ? 'Your last session is loaded below — just tap Login to continue.'
+        ? 'Your account is remembered. Enter your password to continue.'
         : 'Sign in with your faculty credentials to manage equipment.';
 
     return Scaffold(
@@ -149,10 +153,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   const Spacer(),
                   TextButton.icon(
                     onPressed: () => context.go('/student/login'),
-                    icon: const Icon(
-                      Icons.school_outlined,
-                      size: 16,
-                    ),
+                    icon: const Icon(Icons.school_outlined, size: 16),
                     label: const Text('Student Login'),
                     style: TextButton.styleFrom(
                       foregroundColor: PupColors.techCyan,
@@ -196,8 +197,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     children: [
                       FormTextField(
                         controller: _facultyUsername,
-                        label: 'Faculty Username',
-                        hint: 'e.g., profdelacruz',
+                        label: 'Faculty username or email',
+                        hint: 'e.g., admin1@pup.edu.ph',
                         icon: Icons.shield_outlined,
                         validator: AuthValidators.validateFacultyUsername,
                       ),
@@ -211,6 +212,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         value: _rememberMe,
                         onChanged: (v) =>
                             setState(() => _rememberMe = v ?? true),
+                        onForgot: _showForgotPasswordDialog,
                       ),
                       if (_lastError != null) ...[
                         const SizedBox(height: 12),
@@ -263,23 +265,85 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              BiometricLoginRow(
-                onBiometric: () {},
-                onScan: () {},
-              ),
+              BiometricLoginRow(onBiometric: () {}, onScan: () {}),
             ],
           ),
         ),
       ),
     );
   }
+
+  Future<void> _showForgotPasswordDialog(BuildContext context) async {
+    final controller = TextEditingController(text: _facultyUsername.text);
+    final formKey = GlobalKey<FormState>();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset admin password'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Faculty email',
+              hintText: 'e.g., admin@pup.edu.ph',
+            ),
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              final email = value?.trim() ?? '';
+              return email.contains('@') ? null : 'Enter your faculty email.';
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              try {
+                await Supabase.instance.client.auth.resetPasswordForEmail(
+                  controller.text.trim().toLowerCase(),
+                  redirectTo: 'pupitech://reset-callback',
+                );
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'If the account exists, a reset link was sent.',
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } on AuthException catch (error) {
+                if (!dialogContext.mounted) return;
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('Reset failed: ${error.message}')),
+                );
+              }
+            },
+            child: const Text('Send reset link'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
 }
 
 class _RememberAndForgot extends StatelessWidget {
-  const _RememberAndForgot({required this.value, required this.onChanged});
+  const _RememberAndForgot({
+    required this.value,
+    required this.onChanged,
+    required this.onForgot,
+  });
 
   final bool value;
   final ValueChanged<bool?> onChanged;
+  final Future<void> Function(BuildContext) onForgot;
 
   @override
   Widget build(BuildContext context) {
@@ -308,13 +372,7 @@ class _RememberAndForgot extends StatelessWidget {
         ),
         const Spacer(),
         TextButton(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Forgot password (prototype).'),
-              ),
-            );
-          },
+          onPressed: () => onForgot(context),
           style: TextButton.styleFrom(
             foregroundColor: PupColors.techCyan,
             padding: const EdgeInsets.symmetric(horizontal: 4),

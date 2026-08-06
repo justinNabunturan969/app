@@ -3,16 +3,21 @@ import 'package:speech_to_text/speech_to_text.dart' as st;
 import 'dart:math' as math;
 
 import '../../../theme/design_tokens.dart';
+import '../../../app/language_controller.dart';
 
 class VoiceSearchOverlay extends StatefulWidget {
   const VoiceSearchOverlay({
     super.key,
     required this.onTranscribed,
+    required this.onPartialTranscribed,
     required this.onCancel,
+    required this.language,
   });
 
   final ValueChanged<String> onTranscribed;
+  final ValueChanged<String> onPartialTranscribed;
   final VoidCallback onCancel;
+  final AppLanguage language;
 
   @override
   State<VoiceSearchOverlay> createState() => _VoiceSearchOverlayState();
@@ -23,6 +28,9 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
   bool _available = false;
   bool _listening = false;
   String _lastWords = '';
+  String? _error;
+  String? _resolvedLocaleId;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -32,46 +40,118 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
   }
 
   Future<void> _init() async {
+    final copy = AppCopy(widget.language);
     final available = await _speech.initialize(
-      onStatus: (s) {},
-      onError: (e) {},
+      onStatus: (status) {
+        if (!mounted) return;
+        setState(() => _listening = status == 'listening');
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() {
+          _listening = false;
+          _error = _messageForError(error.errorMsg);
+        });
+      },
     );
 
     if (!mounted) return;
     setState(() {
       _available = available;
+      _error = available ? null : copy.microphoneOrSpeechUnavailable();
     });
 
     if (available) {
+      // On web, Android, and iOS the recognizer itself is the authority on
+      // supported languages. Asking the plugin for exact locale names can
+      // reject a valid device locale (for example `tl_PH` vs `fil-PH`) before
+      // recognition starts. Let the platform attempt the selected locale and
+      // surface its error if it truly is unavailable.
+      _resolvedLocaleId = widget.language.speechLocaleId;
       _listen();
     }
   }
 
   Future<void> _listen() async {
-    if (_listening) return;
+    if (_listening || !_available || _resolvedLocaleId == null) return;
     setState(() => _listening = true);
 
-    await _speech.listen(
-      listenOptions: st.SpeechListenOptions(
-        listenMode: st.ListenMode.dictation,
-        pauseFor: const Duration(milliseconds: 700),
-      ),
-      onResult: (result) {
-        setState(() {
-          _lastWords = result.recognizedWords;
-        });
+    try {
+      await _speech.listen(
+        listenOptions: st.SpeechListenOptions(
+          localeId: _resolvedLocaleId,
+          listenMode: st.ListenMode.dictation,
+          // 700ms made normal human pauses look like a speech timeout on
+          // Android and the web. Give the user time to start speaking and to
+          // finish a short equipment name.
+          listenFor: const Duration(seconds: 30),
+          pauseFor: const Duration(seconds: 4),
+          partialResults: true,
+          cancelOnError: false,
+        ),
+        onResult: (result) {
+          final words = result.recognizedWords.trim();
+          setState(() {
+            _lastWords = words;
+          });
+          if (words.isNotEmpty) widget.onPartialTranscribed(words);
 
-        if (result.finalResult) {
-          widget.onTranscribed(_lastWords.trim());
-          _stopAndClose();
-        }
-      },
-    );
+          if (result.finalResult) {
+            _submitAndClose();
+          }
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _listening = false;
+        _error =
+            'Microphone access could not start. Allow Microphone in your browser settings, then try again.';
+      });
+    }
+  }
+
+  String _messageForError(String message) {
+    final normalized = message.toLowerCase();
+    if (normalized.contains('not-allowed') ||
+        normalized.contains('permission') ||
+        normalized.contains('denied')) {
+      return 'Microphone access is blocked. Click the lock icon beside the website address, allow Microphone, then try again.';
+    }
+    if (normalized.contains('no-speech')) {
+      return 'No speech was detected. Check your microphone and try again.';
+    }
+    if (normalized.contains('timeout')) {
+      return 'Voice search timed out before it heard words. Tap Try again, then speak normally.';
+    }
+    return message;
+  }
+
+  Future<void> _retryListening() async {
+    await _speech.cancel();
+    if (!mounted) return;
+    setState(() {
+      _listening = false;
+      _lastWords = '';
+      _error = null;
+      _closing = false;
+    });
+    await _listen();
   }
 
   Future<void> _stopAndClose() async {
     await _speech.stop();
     if (!mounted) return;
+    widget.onCancel();
+  }
+
+  Future<void> _submitAndClose() async {
+    if (_closing) return;
+    _closing = true;
+    final words = _lastWords.trim();
+    await _speech.stop();
+    if (!mounted) return;
+    if (words.isNotEmpty) widget.onTranscribed(words);
     widget.onCancel();
   }
 
@@ -83,6 +163,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final copy = AppCopy(widget.language);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
@@ -124,8 +205,10 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                       Expanded(
                         child: Text(
                           _listening
-                              ? 'Listening…'
-                              : (_available ? 'Ready' : 'Mic unavailable'),
+                              ? copy.listening
+                              : (_available
+                                    ? copy.readyFor(widget.language.label)
+                                    : copy.microphoneUnavailable),
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -149,6 +232,25 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                       fontSize: 14,
                     ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: PupColors.signalRed,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (_available) ...[
+                      const SizedBox(height: 4),
+                      TextButton.icon(
+                        onPressed: _retryListening,
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Try again'),
+                      ),
+                    ],
+                  ],
                   const SizedBox(height: 12),
 
                   Row(
@@ -166,13 +268,15 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: const Text('Cancel'),
+                          child: Text(copy.cancel),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: FilledButton(
-                          onPressed: _stopAndClose,
+                          onPressed: _lastWords.trim().isEmpty
+                              ? null
+                              : _submitAndClose,
                           style: FilledButton.styleFrom(
                             backgroundColor: PupColors.cyberAmber,
                             foregroundColor: const Color(0xFF1B1B1B),
@@ -181,7 +285,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: const Text('Search'),
+                          child: Text(copy.search),
                         ),
                       ),
                     ],

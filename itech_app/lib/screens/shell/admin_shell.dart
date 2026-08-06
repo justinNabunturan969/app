@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/repository_bundle.dart';
+import '../../app/language_controller.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/responsive_scaffold.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../admin/admin_inventory_screen.dart';
 import '../admin/admin_occupancy_screen.dart';
 import '../admin/admin_pending_requests_screen.dart';
 import '../admin/admin_scan_screen.dart';
+import '../student/student_notifications_screen.dart';
 
 /// Admin shell — hosts the 5 admin tabs (Dashboard, Inventory, Pending,
-/// Scan, Live) behind a glass bottom-nav. Each tab renders its own
+/// Scan, Live). On mobile it renders a glass bottom-nav; on desktop /
+/// Chrome it renders a side NavigationRail. Each tab provides its own
 /// header, so the shell intentionally has no AppBar.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
@@ -23,21 +28,57 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
 
-  static const _tabs = [
-    _TabSpec('Dashboard', Icons.dashboard_customize_rounded, 0),
-    _TabSpec('Live', Icons.podcasts_rounded, 1),
-    _TabSpec('Inventory', Icons.inventory_2_rounded, 2),
-    _TabSpec('Pending', Icons.pending_actions_rounded, 3),
-    _TabSpec('Scan', Icons.qr_code_scanner_rounded, 4),
+  static List<ShellTab> _tabs(AppCopy copy) => [
+    ShellTab(
+      label: copy.dashboard,
+      icon: Icons.dashboard_outlined,
+      selectedIcon: Icons.dashboard_rounded,
+    ),
+    ShellTab(
+      label: copy.live,
+      icon: Icons.podcasts_rounded,
+      selectedIcon: Icons.podcasts_rounded,
+    ),
+    ShellTab(
+      label: copy.inventory,
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2_rounded,
+    ),
+    ShellTab(
+      label: copy.pending,
+      icon: Icons.pending_actions_outlined,
+      selectedIcon: Icons.pending_actions_rounded,
+    ),
+    ShellTab(
+      label: copy.scan,
+      icon: Icons.qr_code_scanner_rounded,
+      selectedIcon: Icons.qr_code_scanner_rounded,
+    ),
+    ShellTab(
+      label: copy.notifications,
+      icon: Icons.notifications_none_rounded,
+      selectedIcon: Icons.notifications_rounded,
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<StudentDashboardController>(
-      create: (_) => StudentDashboardController(),
+      create: (ctx) =>
+          StudentDashboardController(bundle: ctx.read<RepositoryBundle>())
+            ..load(),
       builder: (context, _) {
-        return Scaffold(
-          // No AppBar — each tab provides its own header.
+        final ctrl = context.watch<StudentDashboardController>();
+        final copy = AppCopy(context.watch<LanguageController>().language);
+        return ResponsiveScaffold(
+          currentIndex: _index,
+          tabs: _tabs(copy),
+          unreadCount: ctrl.unreadCount,
+          onTabTap: (i) {
+            if (i == _index) return;
+            HapticFeedback.selectionClick();
+            setState(() => _index = i);
+          },
           body: AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
             switchInCurve: Curves.easeOut,
@@ -47,17 +88,17 @@ class _AdminShellState extends State<AdminShell> {
             },
             child: KeyedSubtree(
               key: ValueKey<int>(_index),
-              child: _pageForIndex(_index),
+              child: _AdminShellBody(
+                loading: ctrl.loading,
+                error: ctrl.error,
+                hasData:
+                    ctrl.equipment.isNotEmpty ||
+                    ctrl.activeBorrowings.isNotEmpty ||
+                    ctrl.notifications.isNotEmpty,
+                onRetry: ctrl.load,
+                page: _pageForIndex(_index),
+              ),
             ),
-          ),
-          bottomNavigationBar: _BottomGlassNav(
-            currentIndex: _index,
-            tabs: _tabs,
-            onTap: (i) {
-              if (i == _index) return;
-              HapticFeedback.selectionClick();
-              setState(() => _index = i);
-            },
           ),
         );
       },
@@ -80,6 +121,8 @@ class _AdminShellState extends State<AdminShell> {
         return const AdminPendingRequestsScreen();
       case 4:
         return const AdminScanScreen();
+      case 5:
+        return const StudentNotificationsScreen();
       case 0:
       default:
         return AdminDashboardScreen(onSwitchTab: switchTo);
@@ -87,72 +130,119 @@ class _AdminShellState extends State<AdminShell> {
   }
 }
 
-class _TabSpec {
-  const _TabSpec(this.label, this.icon, this.index);
-  final String label;
-  final IconData icon;
-  final int index;
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Glass bottom nav — mirrors the student shell's pattern, including the
-// red-in-light-mode active color introduced in the light-mode pass.
-// ─────────────────────────────────────────────────────────────────────────
-
-class _BottomGlassNav extends StatelessWidget {
-  const _BottomGlassNav({
-    required this.currentIndex,
-    required this.tabs,
-    required this.onTap,
+/// Wraps a tab page with a top-level loading / error / banner state.
+/// Same UX as the student shell: only the very first load gets a full
+/// spinner, and subsequent refresh failures degrade to a slim banner so
+/// the admin can still work with the data they already have.
+class _AdminShellBody extends StatelessWidget {
+  const _AdminShellBody({
+    required this.loading,
+    required this.error,
+    required this.hasData,
+    required this.onRetry,
+    required this.page,
   });
 
-  final int currentIndex;
-  final List<_TabSpec> tabs;
-  final ValueChanged<int> onTap;
+  final bool loading;
+  final String? error;
+  final bool hasData;
+  final Future<void> Function() onRetry;
+  final Widget page;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && !hasData) {
+      return const _AdminLoadingScaffold();
+    }
+    if (error != null && !hasData) {
+      return _AdminErrorScaffold(message: error!, onRetry: onRetry);
+    }
+    if (error != null) {
+      return Column(
+        children: [
+          _AdminErrorBanner(message: error!, onRetry: onRetry),
+          Expanded(child: page),
+        ],
+      );
+    }
+    return page;
+  }
+}
+
+class _AdminLoadingScaffold extends StatelessWidget {
+  const _AdminLoadingScaffold();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final navBg = isDark
-        ? PupColors.deepMahogany.withValues(alpha: 0.78)
-        : PupColors.lightCardAlt.withValues(alpha: 0.95);
-    final unselectedColor = isDark
-        ? Colors.white.withValues(alpha: 0.7)
-        : PupColors.ashGray.withValues(alpha: 0.75);
-
-    // Light mode → red active item; dark mode → amber (unchanged).
-    final activeColor =
-        isDark ? PupColors.cyberAmber : PupColors.signalRed;
-
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(22),
-        topRight: Radius.circular(22),
+    final tint = isDark ? PupColors.cyberAmber : PupColors.signalRed;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: tint),
+            const SizedBox(height: 14),
+            Text(
+              'Loading from Supabase…',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).hintColor,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Container(
-        color: navBg,
-        child: SafeArea(
-          top: false,
-          child: BottomNavigationBar(
-            currentIndex: currentIndex,
-            onTap: onTap,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.transparent,
-            elevation: 8,
-            selectedItemColor: activeColor,
-            unselectedItemColor: unselectedColor,
-            items: tabs
-                .map(
-                  (t) => BottomNavigationBarItem(
-                    icon: _AdminNavIcon(
-                      icon: Icon(t.icon),
-                      selected: t.index == currentIndex,
-                      activeColor: activeColor,
-                    ),
-                    label: t.label,
-                  ),
-                )
-                .toList(),
+    );
+  }
+}
+
+class _AdminErrorScaffold extends StatelessWidget {
+  const _AdminErrorScaffold({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                size: 56,
+                color: PupColors.signalRed,
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "Couldn't reach the database",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).hintColor,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       ),
@@ -160,74 +250,43 @@ class _BottomGlassNav extends StatelessWidget {
   }
 }
 
-class _AdminNavIcon extends StatelessWidget {
-  const _AdminNavIcon({
-    required this.icon,
-    required this.selected,
-    required this.activeColor,
-  });
+class _AdminErrorBanner extends StatelessWidget {
+  const _AdminErrorBanner({required this.message, required this.onRetry});
 
-  final Icon icon;
-  final bool selected;
-  final Color activeColor;
+  final String message;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.elasticOut,
-      transform: Matrix4.identity()
-        ..translateByDouble(0.0, selected ? -4.0 : 0.0, 0.0, 1.0)
-        ..scaleByDouble(selected ? 1.08 : 1.0, selected ? 1.08 : 1.0, 1.0, 1.0),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (selected)
-            Positioned(
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: isDark
-                      ? [
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.30),
-                            blurRadius: 22,
-                            spreadRadius: 3,
-                          ),
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.15),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : [
-                          // Light mode glow follows the (red) active color.
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.20),
-                            blurRadius: 18,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.10),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ],
+    return Material(
+      color: PupColors.signalRed.withValues(alpha: 0.10),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 18,
+                color: PupColors.signalRed,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          IconTheme(
-            data: IconThemeData(
-              color: selected ? activeColor : null,
-              size: 26,
-            ),
-            child: icon,
+              TextButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

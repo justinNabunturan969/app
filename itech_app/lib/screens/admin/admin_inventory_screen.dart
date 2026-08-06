@@ -33,7 +33,8 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     final q = _query.trim().toLowerCase();
     return all.where((e) {
       if (q.isNotEmpty) {
-        final inText = e.name.toLowerCase().contains(q) ||
+        final inText =
+            e.name.toLowerCase().contains(q) ||
             e.id.toLowerCase().contains(q) ||
             e.category.toLowerCase().contains(q);
         if (!inText) return false;
@@ -156,11 +157,14 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 1.45,
-                      ),
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            // Inventory cards contain a status row and stock
+                            // details; this avoids bottom overflow on narrow
+                            // devices while retaining the two-column layout.
+                            childAspectRatio: 1.15,
+                          ),
                       delegate: SliverChildBuilderDelegate(
                         (context, i) => _InventoryCard(
                           equipment: filtered[i],
@@ -293,9 +297,7 @@ class _FilterChipsRow extends StatelessWidget {
     final idleBorder = isDark
         ? PupGlass.darkBorder(PupColors.cyberAmber)
         : PupColors.ashGray.withValues(alpha: 0.3);
-    final idleFg = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
+    final idleFg = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
 
     return SizedBox(
       height: 34,
@@ -310,8 +312,7 @@ class _FilterChipsRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
               color: selected == i ? PupColors.cyberAmber : Colors.transparent,
               border: Border.all(
-                color:
-                    selected == i ? PupColors.cyberAmber : idleBorder,
+                color: selected == i ? PupColors.cyberAmber : idleBorder,
               ),
               boxShadow: selected == i
                   ? [
@@ -326,9 +327,7 @@ class _FilterChipsRow extends StatelessWidget {
             child: Text(
               filters[i],
               style: TextStyle(
-                color: selected == i
-                    ? const Color(0xFF1B1B1B)
-                    : idleFg,
+                color: selected == i ? const Color(0xFF1B1B1B) : idleFg,
                 fontWeight: FontWeight.w800,
                 fontSize: 11.5,
               ),
@@ -401,10 +400,7 @@ class _InventoryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _MiniIconChip(
-                  icon: status.icon,
-                  tone: status.tone,
-                ),
+                _MiniIconChip(icon: status.icon, tone: status.tone),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -439,8 +435,10 @@ class _InventoryCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: status.tone.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -560,12 +558,8 @@ class _EquipmentDetailSheet extends StatelessWidget {
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: isDark
-                ? theme.colorScheme.surface
-                : PupColors.lightCard,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
+            color: isDark ? theme.colorScheme.surface : PupColors.lightCard,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.15),

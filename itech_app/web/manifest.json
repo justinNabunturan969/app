@@ -1,11 +1,11 @@
 {
-    "name": "itech_app",
-    "short_name": "itech_app",
+    "name": "PUP-ITech Equipment Borrowing",
+    "short_name": "PUP-ITech",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0D172D",
+    "theme_color": "#0D172D",
+    "description": "PUP-ITech Equipment Borrowing.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

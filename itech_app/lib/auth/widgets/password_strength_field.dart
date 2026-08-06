@@ -84,6 +84,7 @@ class PasswordStrengthField extends StatefulWidget {
     this.autovalidateMode = AutovalidateMode.onUserInteraction,
     this.textInputAction,
     this.onSubmitted,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -93,6 +94,7 @@ class PasswordStrengthField extends StatefulWidget {
   final AutovalidateMode autovalidateMode;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final bool enabled;
 
   @override
   State<PasswordStrengthField> createState() => _PasswordStrengthFieldState();
@@ -125,6 +127,7 @@ class _PasswordStrengthFieldState extends State<PasswordStrengthField> {
       children: [
         TextFormField(
           controller: widget.controller,
+          enabled: widget.enabled,
           obscureText: _obscure,
           validator: widget.validator,
           autovalidateMode: widget.autovalidateMode,
@@ -135,7 +138,9 @@ class _PasswordStrengthFieldState extends State<PasswordStrengthField> {
             hintText: widget.hint,
             prefixIcon: const Icon(Icons.lock_outline_rounded),
             suffixIcon: IconButton(
-              onPressed: () => setState(() => _obscure = !_obscure),
+              onPressed: widget.enabled
+                  ? () => setState(() => _obscure = !_obscure)
+                  : null,
               icon: Icon(
                 _obscure
                     ? Icons.visibility_off_outlined

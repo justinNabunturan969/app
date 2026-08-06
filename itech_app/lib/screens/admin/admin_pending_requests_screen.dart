@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -55,12 +55,20 @@ class _AdminPendingRequestsScreenState
       builder: (context, ctrl, _) {
         // The full queue = pending requests + recent approved/rejected
         // decisions (drawn from history). Sorted by most recent.
-        final all = <Borrowing>[
-          ...ctrl.pendingBorrowings,
-          ...ctrl.historyBorrowings.where((b) =>
-              b.status == BorrowingStatus.approved ||
-              b.status == BorrowingStatus.rejected),
-        ]..sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
+        final all =
+            <Borrowing>[
+              ...ctrl.pendingBorrowings,
+              ...ctrl.historyBorrowings.where(
+                (b) =>
+                    b.status == BorrowingStatus.approved ||
+                    b.status == BorrowingStatus.rejected,
+              ),
+            ]..sort((a, b) {
+              final aPending = a.status == BorrowingStatus.pending;
+              final bPending = b.status == BorrowingStatus.pending;
+              if (aPending != bPending) return aPending ? -1 : 1;
+              return b.borrowDate.compareTo(a.borrowDate);
+            });
 
         final pendingCount = ctrl.pendingRequestsCount;
         final filtered = _apply(all);
@@ -122,6 +130,13 @@ class _AdminPendingRequestsScreenState
                             fontSize: 12,
                           ),
                         ),
+                        if (pendingCount > 0) ...[
+                          const SizedBox(height: 12),
+                          _UrgentReviewBanner(
+                            count: pendingCount,
+                            onReviewNow: () => setState(() => _filter = 1),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         _FilterChipsRow(
                           selected: _filter,
@@ -241,11 +256,16 @@ class _AdminPendingRequestsScreenState
       ),
     );
     if (ok != true) return;
-    ctrl.approveBorrowing(b.id);
+    final approved = await ctrl.approveBorrowing(b.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Approved — ${b.equipmentName} is now active.'),
+        content: Text(
+          approved
+              ? 'Approved — ${b.equipmentName} is now active.'
+              : 'Could not approve this request. Please refresh and try again.',
+        ),
+        backgroundColor: approved ? null : PupColors.signalRed,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -282,12 +302,63 @@ class _AdminPendingRequestsScreenState
       ),
     );
     if (ok != true) return;
-    ctrl.rejectBorrowing(b.id);
+    final rejected = await ctrl.rejectBorrowing(b.id);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Rejected — ${b.equipmentName}'),
+        content: Text(
+          rejected
+              ? 'Rejected — ${b.equipmentName}'
+              : 'Could not reject this request. Please refresh and try again.',
+        ),
+        backgroundColor: rejected ? null : PupColors.signalRed,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+class _UrgentReviewBanner extends StatelessWidget {
+  const _UrgentReviewBanner({required this.count, required this.onReviewNow});
+
+  final int count;
+  final VoidCallback onReviewNow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$count pending requests need review',
+      child: Material(
+        color: PupColors.cyberAmber.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onReviewNow,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.priority_high_rounded,
+                  color: PupColors.cyberAmber,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$count ${count == 1 ? 'request needs' : 'requests need'} your review',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                const Text(
+                  'Review now',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(width: 2),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -314,9 +385,7 @@ class _FilterChipsRow extends StatelessWidget {
     final idleBorder = isDark
         ? PupGlass.darkBorder(PupColors.cyberAmber)
         : PupColors.ashGray.withValues(alpha: 0.3);
-    final idleFg = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
+    final idleFg = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
 
     return SizedBox(
       height: 38,
@@ -346,9 +415,7 @@ class _FilterChipsRow extends StatelessWidget {
             child: Text(
               filters[i],
               style: TextStyle(
-                color: selected == i
-                    ? const Color(0xFF1B1B1B)
-                    : idleFg,
+                color: selected == i ? const Color(0xFF1B1B1B) : idleFg,
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
@@ -433,10 +500,7 @@ class _RequestCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _Avatar(
-                name: borrowing.studentName,
-                tone: style.tone,
-              ),
+              _Avatar(name: borrowing.studentName, tone: style.tone),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -501,11 +565,7 @@ class _RequestCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.format_quote_rounded,
-                    size: 14,
-                    color: subtleText,
-                  ),
+                  Icon(Icons.format_quote_rounded, size: 14, color: subtleText),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(

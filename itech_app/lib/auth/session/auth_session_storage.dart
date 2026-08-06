@@ -8,30 +8,26 @@ class StudentCredentials {
     required this.studentId,
     required this.email,
     required this.username,
-    required this.password,
     required this.rememberMe,
   });
 
   final String studentId;
   final String email;
   final String username;
-  final String password;
   final bool rememberMe;
 }
 
 class AdminCredentials {
   const AdminCredentials({
     required this.facultyUsername,
-    required this.password,
     required this.rememberMe,
   });
 
   final String facultyUsername;
-  final String password;
   final bool rememberMe;
 }
 
-/// Persists login session and optional credentials for "Remember Me".
+/// Persists login session and optional account identifiers for "Remember Me".
 ///
 /// **Backed by Supabase Auth.** The Supabase client auto-persists the
 /// session token in secure storage, so we don't manage the token ourselves.
@@ -39,8 +35,8 @@ class AdminCredentials {
 ///   - a fast "is logged in / what role" hint used by the GoRouter
 ///     redirect so the first frame can pick the right shell without a
 ///     network round-trip, and
-///   - the optional "Remember Me" credentials (email/username + password)
-///     so the next launch can pre-fill the login form.
+///   - the optional "Remember Me" account identifier so the next launch can
+///     pre-fill the login form. Passwords are never stored locally.
 ///
 /// The actual auth round-trip happens in [signInWithEmail] /
 /// [signOutAsUser], which the login screens call through
@@ -74,13 +70,10 @@ class AuthSessionStorage {
     };
   }
 
-  /// True if Supabase has a valid session, OR a previously-cached local
-  /// hint says we're logged in. The Supabase check is the source of
-  /// truth — the local cache is just a fast path for app start.
+  /// The Supabase session is the source of truth. A local hint must never
+  /// grant access after the secure session has expired or been revoked.
   Future<bool> isLoggedIn() async {
-    if (_supabase.auth.currentSession != null) return true;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_loggedInKey) ?? false;
+    return _supabase.auth.currentSession != null;
   }
 
   /// Read the role from the cached local hint. If the hint is missing but
@@ -123,11 +116,13 @@ class AuthSessionStorage {
   /// Sign the user in with Supabase Auth, then persist the role hint and
   /// the optional "Remember Me" credentials.
   ///
-  /// Students only enter their **Student ID + Password** in the form. We
-  /// derive the auth email internally (`<student-id>@pupitech.local`) so the
-  /// Supabase Auth call always has the right shape. The pre-refactor API
-  /// took a separate email + username field; that information is preserved
-  /// in the profiles table instead.
+  /// Students may enter their **Student ID** or their PUP email plus password.
+  /// An email is passed to Supabase unchanged; an ID is first looked up
+  /// in the `profiles` table (via the `auth_email_for_student_id` RPC) so
+  /// newly-created accounts — which use the PUP webmail as their auth
+  /// identity — can also be reached by their student number. Falls back
+  /// to the legacy synthetic email form for any pre-existing account
+  /// that was created without a `profiles.student_id` link.
   Future<void> saveStudentSession({
     required String studentId,
     required String email,
@@ -135,7 +130,22 @@ class AuthSessionStorage {
     required String password,
     required bool rememberMe,
   }) async {
-    final derivedEmail = _deriveStudentEmail(studentId, email);
+    final rawIdentifier = email.isNotEmpty ? email.trim() : studentId.trim();
+    final loginIdentifier = studentId.isNotEmpty ? studentId : email;
+
+    // Pick the email to send to Supabase Auth. For a PUP webmail
+    // (`@`-bearing input) we use it as-is. For a bare student ID we
+    // first try the RPC lookup so a PUP-webmail-anchored account can
+    // still be reached by its school number; if that fails we fall
+    // back to the legacy synthetic form for older accounts.
+    String derivedEmail;
+    if (rawIdentifier.contains('@')) {
+      derivedEmail = rawIdentifier.toLowerCase();
+    } else {
+      final resolved = await resolveAuthEmailForStudentId(rawIdentifier);
+      derivedEmail = resolved ?? studentAuthEmailFor(rawIdentifier);
+    }
+
     final prefs = await SharedPreferences.getInstance();
     if (!rememberMe) {
       // Even if rememberMe is off, we still sign the user in for this
@@ -153,44 +163,126 @@ class AuthSessionStorage {
     await prefs.setBool(_loggedInKey, true);
     await prefs.setString(_roleKey, 'student');
     await prefs.setBool(_rememberKey, true);
-    await prefs.setString(_studentIdKey, studentId);
+    await prefs.setString(_studentIdKey, loginIdentifier);
     await prefs.setString(_studentEmailKey, derivedEmail);
     await prefs.setString(_studentUsernameKey, username);
-    await prefs.setString(_studentPasswordKey, password);
+    // Remove passwords written by older builds. Keep only the identifier.
+    await prefs.remove(_studentPasswordKey);
     await prefs.setString(_lastLoginKey, DateTime.now().toIso8601String());
     await _clearAdminFields(prefs);
 
     // Mirror the student_id / username onto the profiles row so the
     // rest of the app (admin scan, occupancy monitor) can display them.
-    await _upsertProfile(
-      studentId: studentId,
-      fullName: username.isNotEmpty ? username : null,
-    );
+    if (!loginIdentifier.contains('@')) {
+      await _upsertProfile(
+        studentId: studentId,
+        fullName: username.isNotEmpty ? username : null,
+      );
+    }
   }
 
-  /// New minimal API: just student ID + password. Used by the
+  /// New minimal API: student ID or PUP email plus password. Used by the
   /// 2-field student login form.
   Future<void> signInStudent({
-    required String studentId,
+    required String identifier,
     required String password,
     required bool rememberMe,
   }) async {
     await saveStudentSession(
-      studentId: studentId,
-      email: '', // derived from studentId
+      studentId: identifier.contains('@') ? '' : identifier,
+      email: identifier.contains('@') ? identifier : '',
       username: '',
       password: password,
       rememberMe: rememberMe,
     );
   }
 
-  /// Convert a PUP student number into the synthetic email Supabase Auth
-  /// uses internally. e.g. `2024-08721-MN-0` → `2024-08721-mn-0@pupitech.local`.
-  static String _deriveStudentEmail(String studentId, String fallback) {
-    final cleaned = studentId.trim().toLowerCase();
-    if (cleaned.isEmpty) return fallback;
+  /// Convert a PUP student number into the legacy synthetic email, or retain
+  /// a PUP email unchanged.
+  static String studentAuthEmailFor(String identifier) {
+    final cleaned = identifier.trim().toLowerCase();
+    if (cleaned.isEmpty) return '';
     if (cleaned.contains('@')) return cleaned;
     return '$cleaned@pupitech.local';
+  }
+
+  /// Resolve a Student ID to its PUP webmail by calling the
+  /// `auth_email_for_student_id` SQL helper. Returns null when no
+  /// profile row matches — callers should surface a generic
+  /// "no account with that student ID" rather than leaking the list
+  /// of valid student IDs in the database.
+  Future<String?> resolveAuthEmailForStudentId(String studentId) async {
+    final cleaned = studentId.trim();
+    if (cleaned.isEmpty) return null;
+    try {
+      final result = await _supabase.rpc(
+        'auth_email_for_student_id',
+        params: {'lookup_id': cleaned},
+      );
+      if (result is String && result.isNotEmpty) return result;
+      if (result is List && result.isNotEmpty) {
+        return result.first?.toString();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Create a new student account.
+  ///
+  /// - [studentId] — school-issued number, validated as `YYYY-NNNNN-XX-N`.
+  /// - [pupWebmail] — PUP-issued email (`@pup.edu.ph`), used as the
+  ///   Supabase auth identity so the student can sign in on any device
+  ///   with the same email + password combo.
+  /// - [password] — at least 6 characters (Supabase's default minimum).
+  /// - [fullName] — optional, derived from the email local-part if blank.
+  ///
+  /// On success: a row in `auth.users` and (via the `handle_new_user`
+  /// trigger) a matching row in `public.profiles` with the student_id
+  /// filled in. If email confirmation is disabled in the Supabase
+  /// project, the user is also signed in immediately; if confirmation
+  /// is required, the response is returned without a session and the
+  /// caller is expected to show "check your inbox".
+  Future<AuthResponse> signUpStudent({
+    required String studentId,
+    required String pupWebmail,
+    required String password,
+    String? fullName,
+  }) async {
+    final cleanedStudentId = studentId.trim();
+    final cleanedEmail = pupWebmail.trim().toLowerCase();
+    final derivedName = fullName == null || fullName.trim().isEmpty
+        ? cleanedEmail.split('@').first
+        : fullName.trim();
+
+    final response = await _supabase.auth.signUp(
+      email: cleanedEmail,
+      password: password,
+      data: {'student_id': cleanedStudentId, 'full_name': derivedName},
+    );
+
+    // The trigger does the profile insert. We still write a follow-up
+    // upsert in case the trigger was skipped (older deployment) or the
+    // profile was created from a manual auth.users import without
+    // metadata. Best-effort — a failure here is non-fatal because the
+    // user is created either way.
+    final user = response.user;
+    if (user != null) {
+      try {
+        await _supabase.from('profiles').upsert({
+          'id': user.id,
+          'email': cleanedEmail,
+          'student_id': cleanedStudentId,
+          'full_name': derivedName,
+        });
+      } catch (_) {
+        // Swallow — the trigger already wrote a row, this is just a
+        // safety net for the older schema state.
+      }
+    }
+
+    return response;
   }
 
   Future<void> saveAdminSession({
@@ -206,6 +298,7 @@ class AuthSessionStorage {
 
     if (!rememberMe) {
       await _signInOrThrow(email: email, password: password);
+      await _requireAdmin();
       await prefs.remove(_rememberKey);
       await _clearStudentFields(prefs);
       await _clearAdminFields(prefs);
@@ -215,17 +308,18 @@ class AuthSessionStorage {
     }
 
     await _signInOrThrow(email: email, password: password);
+    await _requireAdmin();
     await prefs.setBool(_loggedInKey, true);
     await prefs.setString(_roleKey, 'admin');
     await prefs.setBool(_rememberKey, true);
     await prefs.setString(_adminUsernameKey, facultyUsername);
-    await prefs.setString(_adminPasswordKey, password);
+    // Remove passwords written by older builds. Keep only the identifier.
+    await prefs.remove(_adminPasswordKey);
     await prefs.setString(_lastLoginKey, DateTime.now().toIso8601String());
     await _clearStudentFields(prefs);
 
-    // Ensure the profile row is marked as admin so RLS policies let
-    // the admin screens read everything.
-    await _upsertProfile(role: 'admin');
+    // Roles are assigned only by a protected server-side process, never by
+    // the mobile/web client. `_requireAdmin` above verified this account.
   }
 
   Future<StudentCredentials?> loadStudentCredentials() async {
@@ -235,11 +329,7 @@ class AuthSessionStorage {
     final studentId = prefs.getString(_studentIdKey);
     final email = prefs.getString(_studentEmailKey);
     final username = prefs.getString(_studentUsernameKey);
-    final password = prefs.getString(_studentPasswordKey);
-    if (studentId == null ||
-        email == null ||
-        username == null ||
-        password == null) {
+    if (studentId == null || email == null || username == null) {
       return null;
     }
 
@@ -247,7 +337,6 @@ class AuthSessionStorage {
       studentId: studentId,
       email: email,
       username: username,
-      password: password,
       rememberMe: true,
     );
   }
@@ -257,18 +346,28 @@ class AuthSessionStorage {
     if (!(prefs.getBool(_rememberKey) ?? false)) return null;
 
     final username = prefs.getString(_adminUsernameKey);
-    final password = prefs.getString(_adminPasswordKey);
-    if (username == null || password == null) return null;
+    if (username == null) return null;
 
-    return AdminCredentials(
-      facultyUsername: username,
-      password: password,
-      rememberMe: true,
-    );
+    return AdminCredentials(facultyUsername: username, rememberMe: true);
   }
 
   /// Sign the user out of Supabase and clear every local cache.
   Future<void> clearSession() async {
+    // Best-effort: drop the row from `active_sessions` so the admin
+    // Live tab stops showing this account after they leave. Swallowed
+    // on failure so we still proceed to the auth sign-out even if
+    // RLS or the network is unhappy.
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        await _supabase
+            .from('active_sessions')
+            .delete()
+            .eq('profile_id', user.id);
+      }
+    } catch (_) {
+      // continue
+    }
     try {
       await _supabase.auth.signOut();
     } catch (_) {
@@ -307,6 +406,41 @@ class AuthSessionStorage {
     if (response.session == null) {
       throw const AuthException('Sign-in returned no session.');
     }
+    // Mirror the trigger on sign-in: the `handle_new_session` trigger
+    // only fires on `auth.users` INSERT, so a returning user wouldn't
+    // have a row in `active_sessions` until we re-establish it here.
+    // Upsert so the call is idempotent — if the row already exists
+    // (e.g. a quick sign-out / sign-in cycle), we just refresh the
+    // `logged_in_at` and `last_activity_at` timestamps.
+    try {
+      final user = response.user;
+      if (user != null) {
+        await _supabase.from('active_sessions').upsert({
+          'profile_id': user.id,
+          'logged_in_at': DateTime.now().toIso8601String(),
+          'last_activity_at': DateTime.now().toIso8601String(),
+          'activity': 'active',
+        });
+      }
+    } catch (_) {
+      // Best-effort. The Live tab will just show a missing row for
+      // this user until they sign in again, which is non-fatal.
+    }
+  }
+
+  Future<void> _requireAdmin() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw const AuthException('No authenticated user.');
+    final profile = await _supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (profile?['role'] == 'admin') return;
+    await _supabase.auth.signOut();
+    throw const AuthException(
+      'This account does not have administrator access.',
+    );
   }
 
   /// Write the student_id / role / name fields back onto the user's
@@ -329,10 +463,7 @@ class AuthSessionStorage {
     } catch (_) {
       // Profile might not exist yet (auth trigger hasn't run). Try insert.
       try {
-        await _supabase.from('profiles').insert({
-          'id': user.id,
-          ...patch,
-        });
+        await _supabase.from('profiles').insert({'id': user.id, ...patch});
       } catch (_) {
         // Best-effort. The next successful load will retry.
       }

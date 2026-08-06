@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/theme_controller.dart';
+import 'app/language_controller.dart';
 import 'auth/session/auth_session_storage.dart';
+import 'data/repositories/repository_bundle.dart';
 import 'env/supabase_config.dart';
 import 'router/app_router.dart';
 import 'router/router_app.dart';
@@ -11,6 +14,8 @@ import 'screens/onboarding/configuration_required_screen.dart';
 
 late final AuthSessionStorage authSessionStorage;
 late final ThemeController themeController;
+late final LanguageController languageController;
+late final RepositoryBundle repositoryBundle;
 
 /// Convenience accessor used everywhere in the app code.
 SupabaseClient get supabase => Supabase.instance.client;
@@ -43,6 +48,12 @@ Future<void> main() async {
     publishableKey: SupabaseConfig.anonKey,
   );
 
+  // The Supabase-backed bundle reads from the live database for every CRUD
+  // op, so all of the user-visible actions (approve, reject, return, like,
+  // mark read, ...) now persist between launches. The mock factory is still
+  // available via `RepositoryBundle.mock()` if you want to demo offline.
+  repositoryBundle = RepositoryBundle.fromSupabase();
+
   authSessionStorage = AuthSessionStorage();
   final initialLocation = await authSessionStorage.getInitialRoute();
 
@@ -50,14 +61,20 @@ Future<void> main() async {
   // boots directly into the user's chosen mode (no light-mode flash).
   themeController = ThemeController();
   await themeController.load();
+  languageController = LanguageController();
+  await languageController.load();
 
   runApp(
-    RouterApp(
-      router: AppRouter(
-        authStorage: authSessionStorage,
-        initialLocation: initialLocation,
-      ).router,
-      themeController: themeController,
+    Provider<RepositoryBundle>.value(
+      value: repositoryBundle,
+      child: RouterApp(
+        router: AppRouter(
+          authStorage: authSessionStorage,
+          initialLocation: initialLocation,
+        ).router,
+        themeController: themeController,
+        languageController: languageController,
+      ),
     ),
   );
 }

@@ -10,7 +10,7 @@ import '../../theme/design_tokens.dart';
 /// Notifications tab.
 ///
 /// Surfaces every entry in `StudentDashboardController.notifications`, with
-/// type-based coloring, swipe-to-delete + undo, and quick "mark all read" /
+/// type-based coloring, swipe-to-delete, and quick "mark all read" /
 /// "clear all" actions. Reuses the PupColors / PupGlass / tinted icon chip
 /// language shared by the other student tabs.
 class StudentNotificationsScreen extends StatefulWidget {
@@ -101,14 +101,14 @@ class _StudentNotificationsScreenState
                           all.isEmpty
                               ? 'No notifications yet.'
                               : (unread > 0
-                                  ? '$unread unread ${unread == 1 ? 'notification' : 'notifications'}'
-                                  : 'All caught up'),
+                                    ? '$unread unread ${unread == 1 ? 'notification' : 'notifications'}'
+                                    : 'All caught up'),
                           style: TextStyle(
                             color: all.isEmpty
                                 ? subtleText
                                 : (unread > 0
-                                    ? PupColors.cyberAmber
-                                    : PupColors.mintGreen),
+                                      ? PupColors.cyberAmber
+                                      : PupColors.mintGreen),
                             fontWeight: FontWeight.w800,
                             fontSize: 12,
                           ),
@@ -156,12 +156,8 @@ class _StudentNotificationsScreenState
                             ScaffoldMessenger.of(context)
                               ..hideCurrentSnackBar()
                               ..showSnackBar(
-                                SnackBar(
+                                const SnackBar(
                                   content: Text('Notification deleted'),
-                                  action: SnackBarAction(
-                                    label: 'Undo',
-                                    onPressed: () => ctrl.restoreNotification(n),
-                                  ),
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
@@ -192,9 +188,7 @@ class _StudentNotificationsScreenState
                           ),
                           label: const Text(
                             'Clear all notifications',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                           style: TextButton.styleFrom(
                             foregroundColor: PupColors.signalRed,
@@ -270,10 +264,7 @@ class _StudentNotificationsScreenState
         icon: Icons.notifications_active_rounded,
       );
     case NotificationType.overdue:
-      return (
-        tone: PupColors.signalRed,
-        icon: Icons.warning_amber_rounded,
-      );
+      return (tone: PupColors.signalRed, icon: Icons.warning_amber_rounded);
     case NotificationType.newItem:
       return (tone: PupColors.mintGreen, icon: Icons.fiber_new_rounded);
     case NotificationType.returned:
@@ -377,8 +368,9 @@ class _NotificationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.72)
         : PupColors.ashGray;

@@ -17,6 +17,14 @@ abstract class BorrowingsRepository {
   Future<Borrowing?> getById(String id);
 
   // ── Student actions ─────────────────────────────────────────────────
+  /// Create a new pending borrowing request. Returns the freshly-inserted
+  /// row so the controller can move it into `pendingBorrowings` without
+  /// re-fetching the whole list.
+  Future<Borrowing> create({
+    required String equipmentId,
+    String? purpose,
+  });
+
   Future<void> returnBorrowing(String id);
 
   // ── Admin actions ───────────────────────────────────────────────────
@@ -61,6 +69,42 @@ class MockBorrowingsRepository implements BorrowingsRepository {
     }
 
     return find(_active) ?? find(_overdue) ?? find(_pending) ?? find(_history);
+  }
+
+  // ── Student: create a new pending request ─────────────────────────
+  @override
+  Future<Borrowing> create({
+    required String equipmentId,
+    String? purpose,
+  }) async {
+    // The mock has no concept of "current student" — fall back to the
+    // seed student so the created borrowing shows up with a believable
+    // owner on every screen.
+    final equipmentList = StudentMockData.equipment;
+    Equipment? equipment;
+    for (final e in equipmentList) {
+      if (e.id == equipmentId) {
+        equipment = e;
+        break;
+      }
+    }
+
+    final now = DateTime.now();
+    final due = now.add(const Duration(days: 3));
+    final newBorrowing = Borrowing(
+      id: 'B-${now.millisecondsSinceEpoch}',
+      equipmentId: equipmentId,
+      equipmentName: equipment?.name ?? 'Unknown item',
+      purpose: purpose ?? '',
+      borrowDate: now,
+      returnDate: due,
+      status: BorrowingStatus.pending,
+      borrowedByYou: true,
+      qrCode: 'B-${now.millisecondsSinceEpoch}',
+    );
+
+    _pending.insert(0, newBorrowing);
+    return newBorrowing;
   }
 
   // ── Student: return an active or overdue loan ──────────────────────

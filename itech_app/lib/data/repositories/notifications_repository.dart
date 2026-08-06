@@ -10,6 +10,10 @@ import '../../student/models.dart';
 /// so new approvals, reminders, and overdue alerts appear in real time.
 abstract class NotificationsRepository {
   Future<List<AppNotification>> getAll();
+
+  /// Emits the complete inbox whenever Supabase Realtime observes a change.
+  /// The controller owns the subscription and updates the UI immediately.
+  Stream<List<AppNotification>> watch();
   Future<void> markRead(String id);
   Future<void> markAllRead();
   Future<void> clearAll();
@@ -18,12 +22,17 @@ abstract class NotificationsRepository {
 }
 
 class MockNotificationsRepository implements NotificationsRepository {
-  MockNotificationsRepository() : _items = List.of(StudentMockData.notifications);
+  MockNotificationsRepository()
+    : _items = List.of(StudentMockData.notifications);
 
   final List<AppNotification> _items;
 
   @override
   Future<List<AppNotification>> getAll() async => List.unmodifiable(_items);
+
+  @override
+  Stream<List<AppNotification>> watch() =>
+      Stream<List<AppNotification>>.value(List.unmodifiable(_items));
 
   @override
   Future<void> markRead(String id) async {

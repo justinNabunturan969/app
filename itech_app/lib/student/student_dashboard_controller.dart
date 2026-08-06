@@ -2,44 +2,79 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../data/repositories/repository_bundle.dart';
+import '../data/repositories/user_repository.dart' show UserProfile;
 import '../theme/design_tokens.dart';
-import 'mock_data.dart';
-import 'models.dart';
+import 'models.dart'
+    show
+        ActiveSession,
+        ActivityEntry,
+        ActivityScope,
+        AppNotification,
+        Borrowing,
+        BorrowingStatus,
+        Equipment,
+        SessionActivity;
+
+// Note: StudentMockData is still imported for the activity-feed seed
+// values and a few static labels (the borrowings repository returns its own
+// objects, but the activity log is generated locally from each CRUD op so
+// it stays in sync with the UI without a DB round-trip).
+import 'mock_data.dart' show StudentMockData;
 
 class StudentDashboardController extends ChangeNotifier {
-  StudentDashboardController() {
-    // Eagerly initialise the notifications list (instead of `late`) so any
-    // failure happens at construction time with a clear stack, rather than
-    // at first access deep in the widget tree. Was previously `late ... =`
-    // which is fine in theory but caused subtle rebuild-time failures when
-    // the same instance was re-read across hot reloads.
-    _notifications = List.of(StudentMockData.notifications);
-    _unread = StudentMockData.unreadCount(_notifications);
-    _searchDebounceTimer?.cancel();
-    _startTicker();
-    _startOccupancyRotator();
+  StudentDashboardController({required this.bundle}) {
+    // Per-second ticker drives the "1h 23m left" countdown strings in the
+    // borrowings list. Nothing in here touches the DB, so it's safe to
+    // start before `load()` returns.
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      notifyListeners();
+    });
+    // The live-occupancy feed is real data now (read from the
+    // `active_sessions` table on the Supabase bundle) so the old
+    // in-memory rotator is gone. Pull-to-refresh on the Live tab will
+    // call `loadActiveSessions()` to fetch the latest rows.
   }
 
-  // Mock "profile"
-  final String studentName = StudentMockData.studentName;
-  final String studentProgram = StudentMockData.studentProgram;
-  final String studentId = StudentMockData.studentId;
-  final String studentEmail = StudentMockData.studentEmail;
-  final String studentYearLevel = StudentMockData.studentYearLevel;
-  final String studentSection = StudentMockData.studentSection;
-  final DateTime memberSince = StudentMockData.memberSince;
+  /// All CRUD goes through this bundle. The shell is responsible for
+  /// constructing the bundle (mock or Supabase) and passing it here.
+  final RepositoryBundle bundle;
+
+  // ── Load state ─────────────────────────────────────────────────────────
+  bool _loading = true;
+  bool get loading => _loading;
+
+  String? _error;
+  String? get error => _error;
+
+  // ── Profile (from Supabase profiles table via UserRepository) ──────────
+  UserProfile? _userProfile;
+  UserProfile? get userProfile => _userProfile;
+
+  String get studentName => _userProfile?.studentName ?? 'Student';
+  String get studentProgram => _userProfile?.studentProgram ?? '';
+  String get studentId => _userProfile?.studentId ?? '';
+  String get studentEmail => _userProfile?.studentEmail ?? '';
+  String get studentYearLevel => _userProfile?.studentYearLevel ?? '';
+  String get studentSection => _userProfile?.studentSection ?? '';
+  DateTime get memberSince =>
+      _userProfile?.memberSince ?? DateTime(2024, 8, 15);
 
   /// First name only — used by the home greeting so we don't hardcode
-  /// "Juan" anymore.
+  /// "Juan" anymore. Falls back to the static seed if the profile
+  /// hasn't loaded yet (e.g. before the first `load()` finishes).
   String get studentFirstName {
-    final parts = studentName.trim().split(RegExp(r'\s+'));
+    final source = _userProfile?.studentName ?? StudentMockData.studentName;
+    final parts = source.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.first.isEmpty) return 'Student';
     return parts.first;
   }
 
   /// Two-letter initials for the avatar button.
   String get studentInitials {
-    final parts = studentName.trim().split(RegExp(r'\s+'));
+    final source = _userProfile?.studentName ?? StudentMockData.studentName;
+    final parts = source.trim().split(RegExp(r'\s+'));
     if (parts.length == 1) {
       return parts.first.isEmpty
           ? 'S'
@@ -49,132 +84,77 @@ class StudentDashboardController extends ChangeNotifier {
         .toUpperCase();
   }
 
-  /// Lightweight audit log used by the admin "Recent Activity" feed and
-  /// the student "Recently Borrowed" section. Mutations append a row and
-  /// notify listeners.
+  // ── Equipment (from Supabase equipment table) ─────────────────────────
+  List<Equipment> _equipment = const [];
+  List<Equipment> get equipment => _equipment;
+
+  // ── Borrowings (4 buckets) ────────────────────────────────────────────
+  List<Borrowing> _activeBorrowings = const [];
+  List<Borrowing> _overdueBorrowings = const [];
+  List<Borrowing> _historyBorrowings = const [];
+  List<Borrowing> _pendingBorrowings = const [];
+
+  List<Borrowing> get activeBorrowings => List.unmodifiable(_activeBorrowings);
+  List<Borrowing> get overdueBorrowings =>
+      List.unmodifiable(_overdueBorrowings);
+  List<Borrowing> get historyBorrowings =>
+      List.unmodifiable(_historyBorrowings);
+  List<Borrowing> get pendingBorrowings =>
+      List.unmodifiable(_pendingBorrowings);
+
+  int get pendingRequestsCount => _pendingBorrowings.length;
+  int get activeBorrowingsCount => _activeBorrowings.length;
+  int get overdueCount => _overdueBorrowings.length;
+  int get returnedCount => _historyBorrowings
+      .where((b) => b.status == BorrowingStatus.returned)
+      .length;
+  int get totalLoans =>
+      activeBorrowingsCount +
+      overdueCount +
+      _historyBorrowings.length +
+      _pendingBorrowings.length;
+
+  // ── Notifications (from Supabase notifications table) ────────────────
+  List<AppNotification> _notifications = const [];
+  List<AppNotification> get notifications => List.unmodifiable(_notifications);
+
+  StreamSubscription<List<AppNotification>>? _notificationsSubscription;
+
+  int _unread = 0;
+  int get unreadCount => _unread;
+
+  // ── Activity log (local, derived from each CRUD op) ──────────────────
   final List<ActivityEntry> _activity = List.of(StudentMockData.activity);
   List<ActivityEntry> get activity => List.unmodifiable(_activity);
 
-  /// 7-day daily activity numbers, used by the dashboard chart.
+  /// 7-day daily activity numbers. Once borrowings are real, derive this
+  /// from `borrowings.filter(requested_at in last 7 days).length` grouped
+  /// by day. For now we keep the static seed.
   final List<int> weeklyActivity = List.of(StudentMockData.weeklyActivity);
 
-  /// 3 most-recent items the student has borrowed or returned, for the
-  /// "Recently Borrowed" section on the home screen.
   List<ActivityEntry> get recentStudentActivity =>
       _activity.where((a) => a.scope == ActivityScope.student).take(3).toList();
 
-  // Occupancy monitor ────────────────────────────────────────────────────
-  // The admin "Live" tab shows who is logged in right now. For the
-  // prototype we mock the sessions in [StudentMockData.activeSessions] and
-  // mutate them on a slow rotation timer so the count feels live.
-
-  final List<ActiveSession> _activeSessions =
-      List.of(StudentMockData.activeSessions);
+  // ── Occupancy (live data from the active_sessions table) ──────────
+  // The Mock bundle returns the seed list; the Supabase bundle queries
+  // `active_sessions` (joined with `profiles` + `equipment`) and respects
+  // RLS so admins see everyone and students see only themselves.
+  List<ActiveSession> _activeSessions = const [];
   List<ActiveSession> get activeSessions => List.unmodifiable(_activeSessions);
 
   int get occupancyCount => _activeSessions.length;
-
-  int get activeOccupancyCount => _activeSessions
-      .where((s) => s.activity == SessionActivity.active)
-      .length;
-  int get idleOccupancyCount => _activeSessions
-      .where((s) => s.activity == SessionActivity.idle)
-      .length;
+  int get activeOccupancyCount =>
+      _activeSessions.where((s) => s.activity == SessionActivity.active).length;
+  int get idleOccupancyCount =>
+      _activeSessions.where((s) => s.activity == SessionActivity.idle).length;
   int get returningOccupancyCount => _activeSessions
       .where((s) => s.activity == SessionActivity.returning)
       .length;
 
-  /// Slow ticker that mutates sessions so the monitor feels alive. Runs
-  /// every ~18s, well below human attention threshold.
-  Timer? _occupancyRotator;
-  int _rotationTick = 0;
-
-  void _startOccupancyRotator() {
-    _occupancyRotator?.cancel();
-    _occupancyRotator = Timer.periodic(
-      const Duration(seconds: 18),
-      (_) => _rotateSessions(),
-    );
-  }
-
-  void _rotateSessions() {
-    if (_activeSessions.isEmpty) return;
-    _rotationTick++;
-
-    // Every other tick: mark the longest-active "active" session as
-    // idle (simulates the user stepping away).
-    if (_rotationTick % 2 == 0) {
-      final candidates = _activeSessions
-          .where((s) => s.activity == SessionActivity.active)
-          .toList();
-      if (candidates.isNotEmpty) {
-        candidates.sort((a, b) =>
-            a.lastActivityAt.isBefore(b.lastActivityAt) ? 1 : -1);
-        final oldest = candidates.first;
-        final idx = _activeSessions.indexWhere((s) => s.id == oldest.id);
-        if (idx != -1) {
-          _activeSessions[idx] = oldest.copyWith(
-            activity: SessionActivity.idle,
-            lastActivityAt: DateTime.now()
-                .subtract(const Duration(minutes: 6, seconds: 30)),
-          );
-          notifyListeners();
-        }
-      }
-      return;
-    }
-
-    // Otherwise: bring in a new mock session (simulates someone logging
-    // in) and drop the most-idle one to keep the list bounded.
-    if (_activeSessions.length >= 10) {
-      final idleCandidates = _activeSessions
-          .where((s) => s.activity == SessionActivity.idle)
-          .toList();
-      if (idleCandidates.isNotEmpty) {
-        idleCandidates.sort((a, b) =>
-            a.lastActivityAt.isBefore(b.lastActivityAt) ? 1 : -1);
-        _activeSessions
-            .removeWhere((s) => s.id == idleCandidates.first.id);
-      }
-    }
-
-    final newId = 'S-${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-    final names = [
-      ('Ramon Cruz', '2024-04421-MN-0', 'BS Electronics Engineering'),
-      ('Ella Bautista', '2023-02110-MN-0', 'BS Computer Engineering'),
-      ('Diego Reyes', '2024-08812-MN-0', 'BS Mechanical Engineering'),
-      ('Sofia Lim', '2023-07733-MN-0', 'BS Electronics Engineering'),
-      ('Marco Villanueva', '2024-01560-MN-0', 'BS Computer Engineering'),
-    ];
-    final pick = names[DateTime.now().second % names.length];
-    final equipmentChoices = [
-      ('Multimeter Probe Set', 'E-9020', 'Room 301 - Electronics Lab'),
-      ('Screwdriver Kit', 'E-10001', 'Room 205 - Tool Room'),
-      ('Heat Gun (2 Modes)', 'E-8008', 'Room 205 - Tool Room'),
-      ('Power Supply 0-30V', 'E-5222', 'Room 210 - Bench Supplies'),
-    ];
-    final eq = equipmentChoices[DateTime.now().minute % equipmentChoices.length];
-
-    _activeSessions.insert(
-      0,
-      ActiveSession(
-        id: newId,
-        studentId: pick.$2,
-        studentName: pick.$1,
-        program: pick.$3,
-        equipmentName: eq.$1,
-        equipmentId: eq.$2,
-        location: eq.$3,
-        loginAt: DateTime.now(),
-        lastActivityAt: DateTime.now(),
-        activity: SessionActivity.active,
-      ),
-    );
-    notifyListeners();
-  }
-
-  /// Admin: forcibly log a user out. Removes the session and logs it.
-  void kickSession(String id) {
+  /// Admin: forcibly log a user out. Removes the session from the
+  /// local cache and (for the Supabase bundle) the corresponding row
+  /// in `active_sessions`, then logs the action to the activity feed.
+  Future<void> kickSession(String id) async {
     final idx = _activeSessions.indexWhere((s) => s.id == id);
     if (idx == -1) return;
     final removed = _activeSessions.removeAt(idx);
@@ -185,128 +165,338 @@ class StudentDashboardController extends ChangeNotifier {
       title: 'Forced logout: ${removed.studentName}',
       subtitle: '${removed.studentId} • Session terminated by admin',
     );
+    try {
+      await bundle.user.removeOwnSession();
+    } catch (_) {
+      // Mock bundle is a no-op; Supabase can fail on RLS, but the
+      // local removal already gives the admin immediate feedback.
+    }
     notifyListeners();
   }
 
-  // Equipment
-  List<Equipment> _equipment = List.of(StudentMockData.equipment);
-  List<Equipment> get equipment => _equipment;
-
-  // Borrowings
-  final List<Borrowing> activeBorrowings = List.of(
-    StudentMockData.activeBorrowings,
-  );
-  final List<Borrowing> overdueBorrowings = List.of(
-    StudentMockData.overdueBorrowings,
-  );
-  final List<Borrowing> historyBorrowings = List.of(
-    StudentMockData.historyBorrowings,
-  );
-  final List<Borrowing> pendingBorrowings = List.of(
-    StudentMockData.pendingBorrowings,
-  );
-
-  // Requests / pending (mock derived)
-  int get pendingRequestsCount => pendingBorrowings.length;
-  int get activeBorrowingsCount => activeBorrowings.length;
-  int get overdueCount => overdueBorrowings.length;
-  int get returnedCount => historyBorrowings
-      .where((b) => b.status == BorrowingStatus.returned)
-      .length;
-  int get totalLoans => activeBorrowingsCount +
-      overdueCount +
-      historyBorrowings.length +
-      pendingBorrowings.length;
-
-  // Borrowings actions
-  /// Marks the borrowing as returned and moves it from `activeBorrowings` or
-  /// `overdueBorrowings` to the top of `historyBorrowings` with the current
-  /// time as the return date. No-op if the id is not found.
-  void returnBorrowing(String id) {
-    Borrowing? found;
-    final i = activeBorrowings.indexWhere((b) => b.id == id);
-    if (i != -1) {
-      found = activeBorrowings.removeAt(i);
-    } else {
-      final j = overdueBorrowings.indexWhere((b) => b.id == id);
-      if (j != -1) {
-        found = overdueBorrowings.removeAt(j);
-      }
-    }
-    if (found != null) {
-      historyBorrowings.insert(
-        0,
-        found.copyWith(
-          status: BorrowingStatus.returned,
-          returnDate: DateTime.now(),
-        ),
-      );
-      _log(
-        scope: ActivityScope.student,
-        icon: Icons.assignment_return_rounded,
-        tone: PupColors.mintGreen,
-        title: 'Returned: ${found.equipmentName}',
-        subtitle: 'On time • Thank you!',
-      );
+  /// Fetch the latest live-occupancy feed. Used by the admin's Live
+  /// tab on first load and on pull-to-refresh. Safe to call from any
+  /// shell — RLS keeps the result scoped to what the caller can see.
+  Future<void> loadActiveSessions() async {
+    try {
+      _activeSessions = await bundle.user.getActiveSessions();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('loadActiveSessions failed: $e');
+      // Keep the previous list on error — surface through _error so
+      // the shell can show a banner if it cares.
+      _error = e.toString();
       notifyListeners();
     }
   }
 
+  // ── Load (initial + pull-to-refresh) ───────────────────────────────────
+
+  /// Pull every list the screens need from the bundle in parallel. Safe
+  /// to call multiple times — the shells call it once on startup and
+  /// again on the RefreshIndicator pull.
+  Future<void> load() async {
+    try {
+      _loading = true;
+      _error = null;
+      notifyListeners();
+
+      final results = await Future.wait([
+        bundle.equipment.getAll(),
+        bundle.borrowings.getActive(),
+        bundle.borrowings.getPending(),
+        bundle.borrowings.getHistory(),
+        bundle.borrowings.getOverdue(),
+        bundle.notifications.getAll(),
+        _loadProfile(),
+        _loadActiveSessions(),
+      ]);
+
+      _equipment = results[0] as List<Equipment>;
+      _activeBorrowings = results[1] as List<Borrowing>;
+      _pendingBorrowings = results[2] as List<Borrowing>;
+      _historyBorrowings = results[3] as List<Borrowing>;
+      _overdueBorrowings = results[4] as List<Borrowing>;
+      _notifications = results[5] as List<AppNotification>;
+      _userProfile = results[6] as UserProfile?;
+      _activeSessions = results[7] as List<ActiveSession>;
+
+      _recalcUnread();
+      _startNotificationSubscription();
+      _loading = false;
+    } catch (e, st) {
+      debugPrint('StudentDashboardController.load failed: $e\n$st');
+      _error = e.toString();
+      _loading = false;
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Keeps the inbox current without requiring a manual pull-to-refresh or
+  /// restarting the screen. Supabase emits the initial list too, so this also
+  /// closes the small fetch/subscribe timing gap during first load.
+  void _startNotificationSubscription() {
+    if (_notificationsSubscription != null) return;
+    _notificationsSubscription = bundle.notifications.watch().listen(
+      (notifications) {
+        _notifications = notifications;
+        _recalcUnread();
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Notification realtime subscription failed: $error');
+      },
+    );
+  }
+
+  /// Wrapped in a separate function so a single failing call doesn't
+  /// break the whole load() — the rest of the dashboard is still useful
+  /// even if the user profile can't be loaded.
+  Future<UserProfile?> _loadProfile() async {
+    try {
+      return await bundle.user.getCurrentUser();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Same idea as `_loadProfile` for the live-occupancy feed: a single
+  /// failure (e.g. RLS deny because the caller isn't an admin) should
+  /// surface an empty list rather than blowing up the rest of the load.
+  Future<List<ActiveSession>> _loadActiveSessions() async {
+    try {
+      return await bundle.user.getActiveSessions();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  // ── CRUD: Borrowings ───────────────────────────────────────────────────
+
+  /// Submit a new borrow request. Inserts a `pending` row into Supabase,
+  /// moves it to the top of `_pendingBorrowings`, and logs the activity.
+  /// Returns the freshly-created borrowing so the caller can pop the
+  /// confirmation sheet and show a success snackbar referencing the row
+  /// id.
+  Future<Borrowing> requestBorrowing(
+    Equipment equipment, {
+    String? purpose,
+  }) async {
+    try {
+      final created = await bundle.borrowings.create(
+        equipmentId: equipment.id,
+        purpose: purpose,
+      );
+      _pendingBorrowings = [created, ..._pendingBorrowings];
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.outbox_rounded,
+        tone: PupColors.cyberAmber,
+        title: 'Requested: ${created.equipmentName}',
+        subtitle: purpose == null || purpose.isEmpty
+            ? 'Awaiting admin approval'
+            : '"$purpose" — awaiting admin approval',
+      );
+      notifyListeners();
+      return created;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Marks the borrowing as returned and moves it from `activeBorrowings` or
+  /// `overdueBorrowings` to the top of `historyBorrowings` with the current
+  /// time as the return date. Writes to Supabase first, updates local state
+  /// only on success.
+  Future<bool> returnBorrowing(String id) async {
+    try {
+      await bundle.borrowings.returnBorrowing(id);
+      // Re-fetch the single borrowing's new shape so the local list matches
+      // what the DB now has. Cheaper than a full reload.
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return false;
+      _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
+      _overdueBorrowings = _overdueBorrowings.where((b) => b.id != id).toList();
+      _historyBorrowings = [updated, ..._historyBorrowings];
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.assignment_return_rounded,
+        tone: PupColors.mintGreen,
+        title: 'Returned: ${updated.equipmentName}',
+        subtitle: 'On time • Thank you!',
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Admin: approves a pending request. Moves it from `pendingBorrowings`
-  /// to `activeBorrowings` with status=active and borrowDate=now. The
-  /// requested return date is preserved.
-  void approveBorrowing(String id) {
-    final i = pendingBorrowings.indexWhere((b) => b.id == id);
-    if (i == -1) return;
-    final found = pendingBorrowings.removeAt(i);
-    activeBorrowings.insert(
-      0,
-      found.copyWith(
-        status: BorrowingStatus.active,
-        borrowDate: DateTime.now(),
-      ),
-    );
-    _log(
-      scope: ActivityScope.admin,
-      icon: Icons.check_circle_rounded,
-      tone: PupColors.mintGreen,
-      title: 'Approved: ${found.equipmentName}',
-      subtitle: '${found.studentName} • ${found.studentId}',
-    );
-    notifyListeners();
+  /// to `activeBorrowings` with status=active. The original return date
+  /// is preserved.
+  Future<bool> approveBorrowing(String id) async {
+    try {
+      await bundle.borrowings.approve(id);
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return false;
+      _pendingBorrowings = _pendingBorrowings.where((b) => b.id != id).toList();
+      _activeBorrowings = [updated, ..._activeBorrowings];
+      _log(
+        scope: ActivityScope.admin,
+        icon: Icons.check_circle_rounded,
+        tone: PupColors.mintGreen,
+        title: 'Approved: ${updated.equipmentName}',
+        subtitle: '${updated.studentName} • ${updated.studentId}',
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Admin: rejects a pending request. Moves it from `pendingBorrowings`
   /// to `historyBorrowings` with status=rejected.
-  void rejectBorrowing(String id) {
-    final i = pendingBorrowings.indexWhere((b) => b.id == id);
-    if (i == -1) return;
-    final found = pendingBorrowings.removeAt(i);
-    historyBorrowings.insert(
-      0,
-      found.copyWith(
-        status: BorrowingStatus.rejected,
-        returnDate: DateTime.now(),
-      ),
-    );
-    _log(
-      scope: ActivityScope.admin,
-      icon: Icons.cancel_rounded,
-      tone: PupColors.signalRed,
-      title: 'Rejected: ${found.equipmentName}',
-      subtitle: '${found.studentName} • ${found.studentId}',
-    );
+  Future<bool> rejectBorrowing(String id) async {
+    try {
+      await bundle.borrowings.reject(id);
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return false;
+      _pendingBorrowings = _pendingBorrowings.where((b) => b.id != id).toList();
+      _historyBorrowings = [updated, ..._historyBorrowings];
+      _log(
+        scope: ActivityScope.admin,
+        icon: Icons.cancel_rounded,
+        tone: PupColors.signalRed,
+        title: 'Rejected: ${updated.equipmentName}',
+        subtitle: '${updated.studentName} • ${updated.studentId}',
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ── CRUD: Equipment likes (currently a no-op against the DB) ──────────
+
+  /// `toggleLike` persists to the DB once you add a `favorites` table.
+  /// For now it's a local-only state flip — the mock controller had the
+  /// same behaviour.
+  void toggleLike(Equipment equipment) {
+    _equipment = _equipment
+        .map((e) => e.id == equipment.id ? e.copyWith(isLiked: !e.isLiked) : e)
+        .toList();
     notifyListeners();
   }
 
-  // Notifications
-  late final List<AppNotification> _notifications;
-  List<AppNotification> get notifications => _notifications;
+  // ── CRUD: Notifications ───────────────────────────────────────────────
 
-  int _unread = 0;
-  int get unreadCount => _unread;
+  Future<void> markRead(String id) async {
+    try {
+      await bundle.notifications.markRead(id);
+      final i = _notifications.indexWhere((n) => n.id == id);
+      if (i != -1) {
+        _notifications[i] = _notifications[i].copyWith(isRead: true);
+        _recalcUnread();
+        notifyListeners();
+      }
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 
-  // Search
+  Future<void> markAllRead() async {
+    try {
+      await bundle.notifications.markAllRead();
+      _notifications = _notifications
+          .map((n) => n.copyWith(isRead: true))
+          .toList();
+      _recalcUnread();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearAll() async {
+    try {
+      await bundle.notifications.clearAll();
+      _notifications = [];
+      _recalcUnread();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteNotification(String id) async {
+    try {
+      await bundle.notifications.delete(id);
+      _notifications.removeWhere((n) => n.id == id);
+      _recalcUnread();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Re-inserts a previously deleted notification. The bundle's
+  /// `restore` method does the actual insert.
+  Future<void> restoreNotification(AppNotification n) async {
+    try {
+      await bundle.notifications.restore(n);
+      _notifications.insert(0, n);
+      _recalcUnread();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void _recalcUnread() {
+    _unread = _notifications.where((n) => !n.isRead).length;
+  }
+
+  void _log({
+    required ActivityScope scope,
+    required IconData icon,
+    required Color tone,
+    required String title,
+    required String subtitle,
+  }) {
+    _activity.insert(
+      0,
+      ActivityEntry(
+        icon: icon,
+        tone: tone,
+        title: title,
+        subtitle: subtitle,
+        timestamp: DateTime.now(),
+        scope: scope,
+      ),
+    );
+    while (_activity.length > 30) {
+      _activity.removeLast();
+    }
+  }
+
+  // ── Search (still client-side after the load) ────────────────────────
   Timer? _searchDebounceTimer;
   final List<String> _recentSearches = ['Multimeter', 'Wrench Set', 'Arduino'];
   List<String> get recentSearches => _recentSearches;
@@ -344,7 +534,9 @@ class StudentDashboardController extends ChangeNotifier {
     _isSearching = true;
     notifyListeners();
 
-    await Future<void>.delayed(const Duration(milliseconds: 650));
+    // Simulated network latency keeps the UI feeling real even when
+    // the query is answered locally.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
 
     final trimmed = q.trim();
     if (trimmed.isEmpty) {
@@ -400,122 +592,14 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
-  // Likes
-  void toggleLike(Equipment equipment) {
-    // Haptic light (optional in this repo)
-    // You can wire flutter/services Haptics plugin if/when needed.
-    // ignore: deprecated_member_use
-    // ignore: unused_local_variable
-    // (No-op for now)
-
-    _equipment = _equipment
-        .map((e) => e.id == equipment.id ? e.copyWith(isLiked: !e.isLiked) : e)
-        .toList();
-    notifyListeners();
-  }
-
-  // Notifications actions
-  void markAllRead() {
-    for (final n in _notifications) {
-      if (!n.isRead) {
-        final idx = _notifications.indexOf(n);
-        _notifications[idx] = n.copyWith(isRead: true);
-      }
-    }
-    _recalcUnread();
-  }
-
-  void clearAll() {
-    _notifications = [];
-    _recalcUnread();
-  }
-
-  void markRead(String id) {
-    final idx = _notifications.indexWhere((n) => n.id == id);
-    if (idx == -1) return;
-    _notifications[idx] = _notifications[idx].copyWith(isRead: true);
-    _recalcUnread();
-    notifyListeners();
-  }
-
-  void deleteNotification(String id) {
-    _notifications.removeWhere((n) => n.id == id);
-    _recalcUnread();
-    notifyListeners();
-  }
-
-  /// Re-inserts a previously deleted notification (used by the swipe-to-delete
-  /// "Undo" action). Inserts at the top of the list.
-  void restoreNotification(AppNotification n) {
-    _notifications.insert(0, n);
-    _recalcUnread();
-  }
-
-  void _recalcUnread() {
-    _unread = StudentMockData.unreadCount(_notifications);
-    notifyListeners();
-  }
-
-  void _log({
-    required ActivityScope scope,
-    required IconData icon,
-    required Color tone,
-    required String title,
-    required String subtitle,
-  }) {
-    _activity.insert(
-      0,
-      ActivityEntry(
-        icon: icon,
-        tone: tone,
-        title: title,
-        subtitle: subtitle,
-        timestamp: DateTime.now(),
-        scope: scope,
-      ),
-    );
-    // Cap the log so it doesn't grow forever.
-    while (_activity.length > 30) {
-      _activity.removeLast();
-    }
-  }
-
-  // Countdown tick to refresh timers every second.
+  // ── Tickers + dispose ────────────────────────────────────────────────
   Timer? _ticker;
-  void _startTicker() {
-    _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      notifyListeners();
-    });
-  }
 
   @override
   void dispose() {
     _ticker?.cancel();
     _searchDebounceTimer?.cancel();
-    _occupancyRotator?.cancel();
+    _notificationsSubscription?.cancel();
     super.dispose();
   }
-}
-
-/// Scope of an activity entry — drives which screens surface the row.
-enum ActivityScope { admin, student }
-
-/// One row in the in-app activity log.
-class ActivityEntry {
-  const ActivityEntry({
-    required this.icon,
-    required this.tone,
-    required this.title,
-    required this.subtitle,
-    required this.timestamp,
-    required this.scope,
-  });
-
-  final IconData icon;
-  final Color tone;
-  final String title;
-  final String subtitle;
-  final DateTime timestamp;
-  final ActivityScope scope;
 }
