@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import '../biometric_authenticator.dart';
+import '../session/auth_session_storage.dart';
 import '../../theme/design_tokens.dart';
 import '../validators/auth_validators.dart';
 import '../widgets/biometric_button.dart';
@@ -31,6 +33,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _loading = false;
   String? _lastError;
   String? _rememberedUser;
+  final _biometricAuthenticator = BiometricAuthenticator();
 
   @override
   void initState() {
@@ -118,6 +121,40 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         _lastError = _friendlyAuthError(e);
       });
     }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _lastError = null;
+    });
+
+    final biometricError = await _biometricAuthenticator.authenticate();
+    if (biometricError != null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _lastError = biometricError;
+        });
+      }
+      return;
+    }
+
+    final hasSession = await authSessionStorage.isLoggedIn();
+    final role = hasSession ? await authSessionStorage.getRole() : null;
+    if (!mounted) return;
+    if (role == UserRole.admin) {
+      setState(() => _loading = false);
+      context.go('/admin/shell');
+      return;
+    }
+    setState(() {
+      _loading = false;
+      _lastError = hasSession
+          ? 'This saved session does not have administrator access.'
+          : 'Sign in with your password once on this device before using fingerprint sign-in.';
+    });
   }
 
   @override
@@ -265,7 +302,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              BiometricLoginRow(onBiometric: () {}, onScan: () {}),
+              BiometricLoginRow(
+                onBiometric: _unlockWithBiometrics,
+                onScan: () {},
+              ),
             ],
           ),
         ),

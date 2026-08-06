@@ -154,24 +154,30 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                 else
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            // Inventory cards contain a status row and stock
-                            // details; this avoids bottom overflow on narrow
-                            // devices while retaining the two-column layout.
-                            childAspectRatio: 1.15,
+                    sliver: SliverLayoutBuilder(
+                      builder: (context, constraints) {
+                        // Two cards made the text row too narrow on typical
+                        // 360–400dp phones. A single, compact list card is
+                        // easier to scan and prevents horizontal overflow.
+                        final useSingleColumn =
+                            constraints.crossAxisExtent < 430;
+                        return SliverGrid(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: useSingleColumn ? 1 : 2,
+                                mainAxisSpacing: 10,
+                                crossAxisSpacing: 10,
+                                childAspectRatio: useSingleColumn ? 3.0 : 1.15,
+                              ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, i) => _InventoryCard(
+                              equipment: filtered[i],
+                              onTap: () => _showDetails(context, filtered[i]),
+                            ),
+                            childCount: filtered.length,
                           ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => _InventoryCard(
-                          equipment: filtered[i],
-                          onTap: () => _showDetails(context, filtered[i]),
-                        ),
-                        childCount: filtered.length,
-                      ),
+                        );
+                      },
                     ),
                   ),
               ],
@@ -462,13 +468,17 @@ class _InventoryCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Text(
-                  equipment.id,
-                  style: TextStyle(
-                    color: subtleText,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 10,
-                    letterSpacing: 0.3,
+                Expanded(
+                  child: Text(
+                    equipment.id,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: subtleText,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -487,15 +497,6 @@ class _InventoryCard extends StatelessWidget {
                     color: status.tone,
                     fontWeight: FontWeight.w900,
                     fontSize: 10.5,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'available',
-                  style: TextStyle(
-                    color: subtleText,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 10,
                   ),
                 ),
               ],

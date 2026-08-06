@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import '../biometric_authenticator.dart';
 import '../session/auth_session_storage.dart';
 import '../../theme/design_tokens.dart';
 import '../validators/auth_validators.dart';
@@ -33,6 +34,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   String? _lastError;
   String? _rememberedName;
   DateTime? _lastLogin;
+  final _biometricAuthenticator = BiometricAuthenticator();
 
   @override
   void initState() {
@@ -137,6 +139,40 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         _lastError = _friendlyAuthError(e);
       });
     }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _lastError = null;
+    });
+
+    final biometricError = await _biometricAuthenticator.authenticate();
+    if (biometricError != null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _lastError = biometricError;
+        });
+      }
+      return;
+    }
+
+    final hasSession = await authSessionStorage.isLoggedIn();
+    final role = hasSession ? await authSessionStorage.getRole() : null;
+    if (!mounted) return;
+    if (role == UserRole.student) {
+      setState(() => _loading = false);
+      context.go('/student/shell');
+      return;
+    }
+    setState(() {
+      _loading = false;
+      _lastError = hasSession
+          ? 'This saved session belongs to a different account type.'
+          : 'Sign in with your password once on this device before using fingerprint sign-in.';
+    });
   }
 
   Future<void> _showForgotPasswordDialog(BuildContext context) async {
@@ -387,7 +423,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              BiometricLoginRow(onBiometric: () {}, onScan: () {}),
+              BiometricLoginRow(
+                onBiometric: _unlockWithBiometrics,
+                onScan: () {},
+              ),
             ],
           ),
         ),

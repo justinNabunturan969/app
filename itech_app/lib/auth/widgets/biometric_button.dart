@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../theme/design_tokens.dart';
 
-/// Compact "alternative login" button row. Currently stubbed (no platform
-/// integration), but visually represents fingerprint + QR scan so the
-/// future flow is communicated.
+/// Compact alternative-login actions. The parent screen supplies the actual
+/// device-biometric and ID-scan behaviour.
 class BiometricLoginRow extends StatelessWidget {
-  const BiometricLoginRow({super.key, required this.onBiometric, required this.onScan});
+  const BiometricLoginRow({
+    super.key,
+    required this.onBiometric,
+    required this.onScan,
+  });
 
   final VoidCallback onBiometric;
   final VoidCallback onScan;
@@ -14,9 +17,7 @@ class BiometricLoginRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fillColor = isDark
-        ? PupColors.darkCardAlt
-        : PupColors.lightCard;
+    final fillColor = isDark ? PupColors.darkCardAlt : PupColors.lightCard;
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : PupColors.ashGray.withValues(alpha: 0.22);
@@ -28,15 +29,7 @@ class BiometricLoginRow extends StatelessWidget {
           child: _AltButton(
             label: 'Fingerprint',
             icon: Icons.fingerprint_rounded,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Biometric login (prototype).'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-              onBiometric();
-            },
+            onTap: onBiometric,
             fillColor: fillColor,
             borderColor: borderColor,
             labelColor: labelColor,

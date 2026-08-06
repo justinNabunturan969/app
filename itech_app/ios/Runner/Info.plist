@@ -30,6 +30,8 @@
 	<string>This app uses the microphone for voice equipment search.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>This app uses speech recognition to search for equipment by voice.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>PUP-ITech uses Face ID or Touch ID to securely unlock your signed-in account.</string>
 	<key>NFCReaderUsageDescription</key>
 	<string>PUP-ITech uses NFC to read your student ID when borrowing or returning equipment at the office.</string>
 	<key>com.apple.developer.nfc.readersession.formats</key>
