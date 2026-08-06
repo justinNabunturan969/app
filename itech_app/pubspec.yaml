@@ -38,7 +38,6 @@ dependencies:
   speech_to_text: ^7.0.0
   nfc_manager: ^4.2.1          # student ID tap-to-borrow / tap-to-return
   supabase_flutter: ^2.16.0    # backend (Postgres + Auth + Realtime)
-  local_auth: ^2.3.0           # fingerprint / device biometrics
 
 
   # Add when needed (run `dart pub global activate flutterfire_cli` then `flutterfire configure`):

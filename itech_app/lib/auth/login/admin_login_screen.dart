@@ -4,18 +4,15 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
-import '../biometric_authenticator.dart';
-import '../session/auth_session_storage.dart';
 import '../../theme/design_tokens.dart';
 import '../validators/auth_validators.dart';
-import '../widgets/biometric_button.dart';
 import '../widgets/form_text_field.dart';
 import '../widgets/login_hero.dart';
 import '../widgets/password_strength_field.dart';
 
 /// Faculty / Admin login — distinct, security-forward hero
 /// (pup-maroon / shield), same shared form widgets, symmetrical
-/// "switch to student" link, and consistent biometric row.
+/// "switch to student" link, and consistent password sign-in experience.
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 
@@ -33,7 +30,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _loading = false;
   String? _lastError;
   String? _rememberedUser;
-  final _biometricAuthenticator = BiometricAuthenticator();
 
   @override
   void initState() {
@@ -121,40 +117,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         _lastError = _friendlyAuthError(e);
       });
     }
-  }
-
-  Future<void> _unlockWithBiometrics() async {
-    if (_loading) return;
-    setState(() {
-      _loading = true;
-      _lastError = null;
-    });
-
-    final biometricError = await _biometricAuthenticator.authenticate();
-    if (biometricError != null) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _lastError = biometricError;
-        });
-      }
-      return;
-    }
-
-    final hasSession = await authSessionStorage.isLoggedIn();
-    final role = hasSession ? await authSessionStorage.getRole() : null;
-    if (!mounted) return;
-    if (role == UserRole.admin) {
-      setState(() => _loading = false);
-      context.go('/admin/shell');
-      return;
-    }
-    setState(() {
-      _loading = false;
-      _lastError = hasSession
-          ? 'This saved session does not have administrator access.'
-          : 'Sign in with your password once on this device before using fingerprint sign-in.';
-    });
   }
 
   @override
@@ -266,45 +228,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              // Symmetrical "or continue with" + biometric row
-              Row(
-                children: [
-                  Expanded(
-                    child: Divider(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.10)
-                          : PupColors.ashGray.withValues(alpha: 0.30),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(
-                      'or continue with',
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.6)
-                            : PupColors.ashGray,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Divider(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.10)
-                          : PupColors.ashGray.withValues(alpha: 0.30),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              BiometricLoginRow(
-                onBiometric: _unlockWithBiometrics,
-                onScan: () {},
               ),
             ],
           ),
