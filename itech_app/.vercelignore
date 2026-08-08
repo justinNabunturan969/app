@@ -1,0 +1,33 @@
+# Files and folders Vercel does NOT need for the build.
+# Speeds up uploads and prevents accidentally shipping secrets.
+
+# Flutter / Dart build artifacts — re-built on Vercel
+/build/
+.dart_tool/
+.flutter-plugins-dependencies
+*.log
+
+# Native platform folders — irrelevant for web build
+/android/
+/ios/
+/linux/
+/macos/
+/windows/
+
+# Tests and docs
+/test/
+/docs/
+
+# Local Supabase runtime config (contains dev URL + anon key)
+/supabase.json
+/supabase.json.local
+
+# Editor / IDE / OS junk
+.idea/
+.vscode/
+.DS_Store
+*.iml
+
+# Flutter analyze log
+/flutter_*.log
+/.flutter_analyze.log
