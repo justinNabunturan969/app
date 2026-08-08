@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 124 124" fill="none">
+  <defs>
+    <linearGradient id="wrenchFill" x1="18" y1="16" x2="98" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD054"/>
+      <stop offset="0.55" stop-color="#FFB800"/>
+      <stop offset="1" stop-color="#E6A600"/>
+    </linearGradient>
+    <filter id="wrenchGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#FFB800" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <g transform="translate(62 62) rotate(-45) translate(-62 -62)" filter="url(#wrenchGlow)">
+    <path fill="url(#wrenchFill)" stroke="rgba(255,255,255,0.22)" stroke-width="2.2" stroke-linejoin="round"
+      d="M22.3 42.2C18.4 34.8 22.8 27.2 30.6 24.1L38.8 32.3L36.2 34.9L41.8 40.5L44.4 37.9L96.7 90.2C99.4 92.9 99.4 97.1 96.7 99.8C94 102.5 89.8 102.5 87.1 99.8L34.8 47.5L32.2 50.1L26.6 44.5Z"/>
+    <rect x="36" y="28" width="10" height="62" rx="5" fill="rgba(255,255,255,0.16)"/>
+  </g>
+</svg>

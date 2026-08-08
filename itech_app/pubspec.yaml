@@ -65,7 +65,7 @@ flutter:
 
   assets:
     - assets/branding/pup_itech_source_icon.png
-    - assets/branding/launch_wrench.png
+    - assets/branding/launch_wrench.svg
 
   # To add assets to your application, add an assets section, like this:
   # assets:
