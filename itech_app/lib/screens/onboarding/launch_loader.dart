@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,8 +6,10 @@ import '../../main.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/branding/launch_wrench_icon.dart';
 
-/// Branded launch loader — a single glowing wrench zooms in until it
-/// fills the screen, then routes to the next destination.
+/// The app's universal entry animation.
+///
+/// The wrench rises from below the screen, settles in the center, glides left,
+/// and reveals the product name with a typewriter effect before navigation.
 class LaunchLoader extends StatefulWidget {
   const LaunchLoader({super.key});
 
@@ -19,46 +19,68 @@ class LaunchLoader extends StatefulWidget {
 
 class _LaunchLoaderState extends State<LaunchLoader>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scale;
+  static const _appName = 'ITech App';
+  static const _wrenchSize = 86.0;
 
-  static const _wrenchSize = 124.0;
+  late final AnimationController _controller;
+  late final Animation<Alignment> _wrenchAlignment;
+  late final Animation<double> _wrenchScale;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 2600),
     );
-    _scale = CurvedAnimation(parent: _controller, curve: Curves.easeInCubic);
-
+    _wrenchAlignment = TweenSequence<Alignment>([
+      TweenSequenceItem(
+        tween: AlignmentTween(
+          begin: const Alignment(0, 2.15),
+          end: Alignment.center,
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: AlignmentTween(
+          begin: Alignment.center,
+          end: const Alignment(-0.42, 0),
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 24,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<Alignment>(const Alignment(-0.42, 0)),
+        weight: 36,
+      ),
+    ]).animate(_controller);
+    _wrenchScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 0.72,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 40,
+      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 60),
+    ]).animate(_controller);
     _runAndAdvance();
   }
 
   Future<void> _runAndAdvance() async {
     await _controller.forward();
+    await Future<void>.delayed(const Duration(milliseconds: 240));
     if (!mounted) return;
+
     final loggedIn = await authSessionStorage.isLoggedIn();
     if (!mounted) return;
     if (!loggedIn) {
       context.go('/welcome');
       return;
     }
+
     final role = await authSessionStorage.getRole();
     if (!mounted) return;
-    final dest = switch (role) {
-      UserRole.admin => '/admin/shell',
-      _ => '/student/shell',
-    };
-    context.go(dest);
-  }
-
-  double _fillScale(Size screen) {
-    final diagonal = math.sqrt(
-      screen.width * screen.width + screen.height * screen.height,
-    );
-    return (diagonal / _wrenchSize) * 1.08;
+    context.go(role == UserRole.admin ? '/admin/shell' : '/student/shell');
   }
 
   @override
@@ -69,39 +91,70 @@ class _LaunchLoaderState extends State<LaunchLoader>
 
   @override
   Widget build(BuildContext context) {
-    final screen = MediaQuery.sizeOf(context);
-    final beginScale = 1.0;
-    final endScale = _fillScale(screen);
-
     return Scaffold(
       backgroundColor: const Color(0xFF08090B),
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          final currentScale =
-              beginScale + (endScale - beginScale) * _scale.value;
+          final typingProgress = ((_controller.value - 0.64) / 0.27).clamp(
+            0.0,
+            1.0,
+          );
+          final typedLength = (_appName.length * typingProgress).floor();
+          final typedName = _appName.substring(0, typedLength);
+          final isTyping = typedLength < _appName.length;
 
-          return Center(
-            child: Transform.scale(
-              scale: currentScale,
-              child: Container(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: PupColors.cyberAmber.withValues(alpha: 0.55),
-                      blurRadius: 48,
-                      spreadRadius: 18,
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: _wrenchAlignment.value,
+                child: Transform.scale(
+                  scale: _wrenchScale.value,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x4DFFB800),
+                          blurRadius: 28,
+                          spreadRadius: 3,
+                        ),
+                      ],
                     ),
-                    BoxShadow(
-                      color: PupColors.cyberAmber.withValues(alpha: 0.25),
-                      blurRadius: 90,
-                      spreadRadius: 36,
-                    ),
-                  ],
+                    child: LaunchWrenchIcon(size: _wrenchSize),
+                  ),
                 ),
-                child: const LaunchWrenchIcon(size: _wrenchSize),
               ),
-            ),
+              Align(
+                alignment: const Alignment(0.28, 0),
+                child: Opacity(
+                  opacity: typingProgress,
+                  child: SizedBox(
+                    width: 168,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: typedName),
+                          if (isTyping)
+                            const TextSpan(
+                              text: '|',
+                              style: TextStyle(color: PupColors.cyberAmber),
+                            ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.25,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
