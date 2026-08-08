@@ -60,14 +60,11 @@ class AuthSessionStorage {
   // ── Public API used by the router and the login screens ─────────────
 
   Future<String> getInitialRoute() async {
-    if (!await isLoggedIn()) return '/splash';
-
-    final role = await getRole();
-    return switch (role) {
-      UserRole.student => '/student/shell',
-      UserRole.admin => '/admin/shell',
-      null => '/splash',
-    };
+    // Always start at /launching. The loader plays the wrench zoom
+    // animation, then routes to the right home shell (or /welcome for
+    // signed-out users) based on the current auth state. This is the
+    // single entry point for every cold start of the app.
+    return '/launching';
   }
 
   /// The Supabase session is the source of truth. A local hint must never

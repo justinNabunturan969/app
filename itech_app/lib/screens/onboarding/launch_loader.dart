@@ -71,6 +71,15 @@ class _LaunchLoaderState extends State<LaunchLoader>
   Future<void> _runAndAdvance() async {
     await _controller.forward();
     if (!mounted) return;
+    // Route based on auth state: signed-in users go to their home
+    // shell, everyone else lands on the welcome screen so the new-user
+    // onboarding flow can take over from there.
+    final loggedIn = await authSessionStorage.isLoggedIn();
+    if (!mounted) return;
+    if (!loggedIn) {
+      context.go('/welcome');
+      return;
+    }
     final role = await authSessionStorage.getRole();
     if (!mounted) return;
     final dest = switch (role) {

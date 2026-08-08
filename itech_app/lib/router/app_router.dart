@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../auth/session/auth_session_storage.dart';
 import '../screens/onboarding/launch_loader.dart';
-import '../screens/onboarding/splash_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/role_selection/role_selection_screen.dart';
 import '../auth/login/student_login_screen.dart';
@@ -27,15 +26,10 @@ class AppRouter {
     errorBuilder: (context, state) =>
         Scaffold(body: Center(child: Text(state.error.toString()))),
     routes: [
-      GoRoute(
-        path: '/splash',
-        name: 'splash',
-        pageBuilder: (context, state) =>
-            _fadeScalePage(key: state.pageKey, child: const SplashScreen()),
-      ),
-      // Post-auth / every-cold-start loader. Shows the wrench zoom
-      // animation, then routes to the right home shell based on role.
-      // Logged-out users are redirected away (see _redirect below).
+      // Universal entry point. Shows the wrench zoom animation, then
+      // routes based on auth state: signed-in -> home shell,
+      // signed-out -> /welcome. Replaces the old /splash for every
+      // cold start of the app.
       GoRoute(
         path: '/launching',
         name: 'launching',
@@ -117,7 +111,8 @@ class AppRouter {
     final loc = state.matchedLocation;
 
     const authEntryRoutes = {
-      '/splash',
+      // /launching is the entry point — it self-routes after the
+      // animation, so we don't list it here.
       '/welcome',
       '/role',
       '/student/login',
@@ -143,10 +138,13 @@ class AppRouter {
       return null;
     }
 
-    if (loc == '/student/shell' || loc == '/admin/shell' || loc == '/launching') {
+    if (loc == '/student/shell' || loc == '/admin/shell') {
       return '/role';
     }
 
+    // /launching is the app's universal entry point — it self-routes to
+    // /welcome (signed-out) or the home shell (signed-in) after the
+    // animation, so we leave it alone here.
     return null;
   }
 }
