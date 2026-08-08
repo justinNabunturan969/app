@@ -88,6 +88,32 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!--
+    Flutter web builds from older releases registered an app-shell service
+    worker. Those workers can keep an already-installed app on an obsolete
+    JavaScript bundle indefinitely. We intentionally do not use offline
+    caching: each launch should load the current production build instead.
+  -->
+  <script>
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        return Promise.all(registrations.map(function (registration) {
+          return registration.unregister();
+        }));
+      }).then(function () {
+        return caches.keys();
+      }).then(function (keys) {
+        return Promise.all(keys.map(function (key) {
+          return caches.delete(key);
+        }));
+      }).catch(function (error) {
+        // A cache cleanup failure must never prevent the app from starting.
+        console.warn('Unable to clear an old app cache:', error);
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 
   <!--

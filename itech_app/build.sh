@@ -70,8 +70,14 @@ echo "==> Building web bundle (release)"
 flutter build web \
   --release \
   --no-wasm-dry-run \
+  --pwa-strategy=none \
   --no-tree-shake-icons \
   $DART_DEFINES
+
+# Retire app-shell workers created by older Flutter builds. The file is kept at
+# the legacy URL because installed copies ask the browser to update that exact
+# service-worker script before they can receive the new bundle.
+cp web/service_worker_cleanup.js build/web/flutter_service_worker.js
 
 echo "==> Build finished at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "==> Output: build/web/ ($(du -sh build/web 2>/dev/null | cut -f1))"

@@ -39,6 +39,10 @@ required before using the current app build: it protects profile roles, moves
 borrowing approval/return actions into secure database functions, prevents
 duplicate open requests, and adds an admin-only audit log.
 
+Finally, run `supabase/migrations/0004_return_existing_open_borrowing.sql`.
+It preserves the duplicate-request protection while safely returning the
+existing open request when an older client or a repeated tap submits again.
+
 To verify it worked, run this in the SQL editor:
 
 ```sql

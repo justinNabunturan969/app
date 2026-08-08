@@ -13,16 +13,14 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
 
   /// Joins the equipment and the student (profiles) rows so the model
   /// carries display names instead of falling back to its hardcoded
-  /// placeholder defaults. PostgREST embedded-resource syntax:
-  ///   `<alias>:<fk_column> ( <columns> )`
-  /// `student` is the alias; `student_id` is the FK column on `borrowings`
-  /// (which points to `profiles.id`). The embedded `profiles` row carries
-  /// `student_id` (the school number string) and `full_name`.
+  /// placeholder defaults. The FK hints make the relation names unambiguous
+  /// to PostgREST. `student` is an alias for the embedded `profiles` row;
+  /// its `student_id` field is the school number, not the FK UUID.
   static const _selectWithJoins =
       'id, equipment_id, student_id, status, purpose, requested_at, '
       'borrowed_at, due_at, returned_at, '
-      'equipment:equipment_id ( id, name ), '
-      'student:student_id ( id, student_id, full_name )';
+      'equipment:equipment!borrowings_equipment_id_fkey ( id, name ), '
+      'student:profiles!borrowings_student_id_fkey ( id, student_id, full_name )';
 
   static Borrowing _fromRow(Map<String, dynamic> row) {
     final equipment = row['equipment'];
@@ -103,6 +101,14 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     return rows.map(_fromRow).toList(growable: false);
   }
 
+  Future<List<Borrowing>> _listAllWithJoins() async {
+    final rows = await _client
+        .from('borrowings')
+        .select(_selectWithJoins)
+        .order('requested_at', ascending: false);
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
   @override
   Future<List<Borrowing>> getActive() => _listByStatus('active');
 
@@ -135,11 +141,10 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   }
 
   /// Live feed of every borrowing visible to the current user. The
-  /// Supabase Flutter client opens a WebSocket to the Realtime server and
-  /// pushes a fresh snapshot of the `borrowings` table every time a row
-  /// is inserted, updated, or deleted. RLS policies on the `borrowings`
-  /// table scope the result: students get only their own rows, admins
-  /// get everything.
+  /// Supabase Realtime emits plain `borrowings` rows, which cannot include
+  /// PostgREST relationship joins. Use those events only as an invalidation
+  /// signal, then reload a joined snapshot so the admin UI keeps the real
+  /// equipment and student names.
   ///
   /// The migration `0001_initial_schema.sql` already added `borrowings` to
   /// the `supabase_realtime` publication, so no further DB work is needed
@@ -155,13 +160,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     return _client
         .from('borrowings')
         .stream(primaryKey: ['id'])
-        .map((rows) {
-          final borrowings = rows.map(_fromRow).toList();
-          // Newest first — matches the ordering of `getPending` and
-          // `getHistory`, so the UI doesn't jump on every realtime emit.
-          borrowings.sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
-          return List<Borrowing>.unmodifiable(borrowings);
-        });
+        .asyncMap((_) => _listAllWithJoins());
   }
 
   @override
