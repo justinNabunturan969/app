@@ -174,7 +174,7 @@ class _StudentSignupScreenState extends State<StudentSignupScreen> {
             duration: const Duration(seconds: 3),
           ),
         );
-      context.go('/student/shell');
+      context.go('/launching');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {

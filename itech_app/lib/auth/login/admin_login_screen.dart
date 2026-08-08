@@ -103,7 +103,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       );
       if (!mounted) return;
       setState(() => _loading = false);
-      context.go('/admin/shell');
+      context.go('/launching');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
