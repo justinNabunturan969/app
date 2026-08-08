@@ -20,7 +20,6 @@ class LaunchLoader extends StatefulWidget {
 class _LaunchLoaderState extends State<LaunchLoader>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _opacity;
   late final Animation<double> _scale;
 
   static const _wrenchSize = 124.0;
@@ -32,14 +31,7 @@ class _LaunchLoaderState extends State<LaunchLoader>
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     );
-    _opacity = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.25, curve: Curves.easeOut),
-    );
-    _scale = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInCubic,
-    );
+    _scale = CurvedAnimation(parent: _controller, curve: Curves.easeInCubic);
 
     _runAndAdvance();
   }
@@ -78,7 +70,7 @@ class _LaunchLoaderState extends State<LaunchLoader>
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
-    final beginScale = 0.18;
+    final beginScale = 1.0;
     final endScale = _fillScale(screen);
 
     return Scaffold(
@@ -90,27 +82,24 @@ class _LaunchLoaderState extends State<LaunchLoader>
               beginScale + (endScale - beginScale) * _scale.value;
 
           return Center(
-            child: Opacity(
-              opacity: _opacity.value,
-              child: Transform.scale(
-                scale: currentScale,
-                child: Container(
-                  decoration: BoxDecoration(
-                    boxShadow: [
-                      BoxShadow(
-                        color: PupColors.cyberAmber.withValues(alpha: 0.55),
-                        blurRadius: 48,
-                        spreadRadius: 18,
-                      ),
-                      BoxShadow(
-                        color: PupColors.cyberAmber.withValues(alpha: 0.25),
-                        blurRadius: 90,
-                        spreadRadius: 36,
-                      ),
-                    ],
-                  ),
-                  child: const LaunchWrenchIcon(size: _wrenchSize),
+            child: Transform.scale(
+              scale: currentScale,
+              child: Container(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: PupColors.cyberAmber.withValues(alpha: 0.55),
+                      blurRadius: 48,
+                      spreadRadius: 18,
+                    ),
+                    BoxShadow(
+                      color: PupColors.cyberAmber.withValues(alpha: 0.25),
+                      blurRadius: 90,
+                      spreadRadius: 36,
+                    ),
+                  ],
                 ),
+                child: const LaunchWrenchIcon(size: _wrenchSize),
               ),
             ),
           );
