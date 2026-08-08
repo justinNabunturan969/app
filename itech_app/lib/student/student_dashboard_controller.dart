@@ -117,6 +117,24 @@ class StudentDashboardController extends ChangeNotifier {
       _historyBorrowings.length +
       _pendingBorrowings.length;
 
+  /// Equipment IDs the current student already has an open request for
+  /// (pending / active / overdue). Used by the home grid and search
+  /// screen to hide "Tap to borrow" cards that would just bounce off
+  /// the unique-index constraint in the DB.
+  Set<String> get openRequestEquipmentIds {
+    final ids = <String>{};
+    for (final b in _pendingBorrowings) {
+      if (b.equipmentId.isNotEmpty) ids.add(b.equipmentId);
+    }
+    for (final b in _activeBorrowings) {
+      if (b.equipmentId.isNotEmpty) ids.add(b.equipmentId);
+    }
+    for (final b in _overdueBorrowings) {
+      if (b.equipmentId.isNotEmpty) ids.add(b.equipmentId);
+    }
+    return ids;
+  }
+
   // ── Notifications (from Supabase notifications table) ────────────────
   List<AppNotification> _notifications = const [];
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
@@ -367,8 +385,10 @@ class StudentDashboardController extends ChangeNotifier {
       notifyListeners();
       return created;
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI (e.g.
+      // the borrow confirm sheet). Don't pollute the shell banner with
+      // the raw exception — just log it for debugging.
+      debugPrint('action failed: $e');
       rethrow;
     }
   }
@@ -397,8 +417,10 @@ class StudentDashboardController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI (e.g.
+      // snackbars from the admin screens). Don't pollute the shell
+      // banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
       return false;
     }
   }
@@ -423,8 +445,9 @@ class StudentDashboardController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
       return false;
     }
   }
@@ -448,8 +471,9 @@ class StudentDashboardController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
       return false;
     }
   }
@@ -478,8 +502,9 @@ class StudentDashboardController extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
     }
   }
 
@@ -492,8 +517,9 @@ class StudentDashboardController extends ChangeNotifier {
       _recalcUnread();
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
     }
   }
 
@@ -504,8 +530,9 @@ class StudentDashboardController extends ChangeNotifier {
       _recalcUnread();
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
     }
   }
 
@@ -516,8 +543,9 @@ class StudentDashboardController extends ChangeNotifier {
       _recalcUnread();
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
     }
   }
 
@@ -530,8 +558,9 @@ class StudentDashboardController extends ChangeNotifier {
       _recalcUnread();
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
     }
   }
 
@@ -613,6 +642,7 @@ class StudentDashboardController extends ChangeNotifier {
     }
 
     final queryLower = trimmed.toLowerCase();
+    final openIds = openRequestEquipmentIds;
     _filtered = _equipment.where((e) {
       final inText =
           e.name.toLowerCase().contains(queryLower) ||
@@ -620,7 +650,7 @@ class StudentDashboardController extends ChangeNotifier {
       final inCategory = _selectedCategory == 'All'
           ? true
           : e.category == _selectedCategory;
-      return inText && inCategory;
+      return inText && inCategory && !openIds.contains(e.id);
     }).toList();
 
     _isSearching = false;

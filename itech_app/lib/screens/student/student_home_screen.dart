@@ -54,15 +54,24 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   List<Equipment> _visibleEquipment(StudentDashboardController ctrl) {
+    // Hide items the student already has an open request for (pending,
+    // active, or overdue). Tapping "Tap to borrow" on those would just
+    // bounce off the DB's unique-index constraint.
+    final openIds = ctrl.openRequestEquipmentIds;
+    bool isAvailableForThisStudent(Equipment e) =>
+        e.available > 0 && !openIds.contains(e.id);
+
     if (ctrl.query.trim().isNotEmpty) {
-      return ctrl.filtered;
+      return ctrl.filtered
+          .where((e) => !openIds.contains(e.id))
+          .toList(growable: false);
     }
 
     final chip = _chips[_selectedChip];
     return ctrl.equipment.where((e) {
-      if (chip == 'Available now') return e.available > 0;
-      if (chip == 'All') return true;
-      return e.category == chip;
+      if (chip == 'Available now') return isAvailableForThisStudent(e);
+      if (chip == 'All') return !openIds.contains(e.id);
+      return e.category == chip && !openIds.contains(e.id);
     }).toList();
   }
 
