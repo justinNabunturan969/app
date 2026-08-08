@@ -11,17 +11,40 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// Joins the equipment row so the model carries the equipment's display
-  /// name. Uses PostgREST embedded resources via `equipment:equipment_id(...)`.
-  static const _selectWithEquipment =
-      'id, equipment_id, status, purpose, requested_at, borrowed_at, '
-      'due_at, returned_at, '
-      'equipment:equipment_id ( id, name )';
+  /// Joins the equipment and the student (profiles) rows so the model
+  /// carries display names instead of falling back to its hardcoded
+  /// placeholder defaults. PostgREST embedded-resource syntax:
+  ///   `<alias>:<fk_column> ( <columns> )`
+  /// `student` is the alias; `student_id` is the FK column on `borrowings`
+  /// (which points to `profiles.id`). The embedded `profiles` row carries
+  /// `student_id` (the school number string) and `full_name`.
+  static const _selectWithJoins =
+      'id, equipment_id, student_id, status, purpose, requested_at, '
+      'borrowed_at, due_at, returned_at, '
+      'equipment:equipment_id ( id, name ), '
+      'student:student_id ( id, student_id, full_name )';
 
   static Borrowing _fromRow(Map<String, dynamic> row) {
-    final equipment = row['equipment'] as Map<String, dynamic>?;
-    final equipmentName = (equipment?['name'] as String?) ?? 'Unknown item';
+    final equipment = row['equipment'];
+    final equipmentName = (equipment is Map && equipment['name'] is String)
+        ? equipment['name'] as String
+        : 'Unknown item';
     final equipmentId = (row['equipment_id'] as String?) ?? '';
+
+    // `student` is the embedded `profiles` row (see _selectWithJoins).
+    // The text `student_id` inside it is the school number, not the FK
+    // UUID — the UUID is `student['id']`.
+    final student = row['student'];
+    String studentName = 'Unknown student';
+    String studentNumber = '';
+    if (student is Map) {
+      final rawName = student['full_name'];
+      if (rawName is String && rawName.trim().isNotEmpty) {
+        studentName = rawName;
+      }
+      final rawNumber = student['student_id'];
+      if (rawNumber is String) studentNumber = rawNumber;
+    }
 
     // Pick whichever timestamp the row has. Pending requests have only
     // requested_at, active loans have borrowed_at/due_at, history has
@@ -40,6 +63,8 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       id: row['id'] as String,
       equipmentId: equipmentId,
       equipmentName: equipmentName,
+      studentId: studentNumber,
+      studentName: studentName,
       purpose: (row['purpose'] as String?) ?? '',
       borrowDate: borrowDate,
       returnDate: returnDate,
@@ -72,7 +97,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   Future<List<Borrowing>> _listByStatus(String status) async {
     final rows = await _client
         .from('borrowings')
-        .select(_selectWithEquipment)
+        .select(_selectWithJoins)
         .eq('status', status)
         .order('requested_at', ascending: false);
     return rows.map(_fromRow).toList(growable: false);
@@ -92,7 +117,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     // "History" is everything that's terminal — returned or rejected.
     final rows = await _client
         .from('borrowings')
-        .select(_selectWithEquipment)
+        .select(_selectWithJoins)
         .inFilter('status', ['returned', 'rejected'])
         .order('returned_at', ascending: false);
     return rows.map(_fromRow).toList(growable: false);
@@ -102,7 +127,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   Future<Borrowing?> getById(String id) async {
     final row = await _client
         .from('borrowings')
-        .select(_selectWithEquipment)
+        .select(_selectWithJoins)
         .eq('id', id)
         .maybeSingle();
     if (row == null) return null;
