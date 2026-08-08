@@ -16,6 +16,14 @@ abstract class BorrowingsRepository {
   Future<List<Borrowing>> getHistory();
   Future<Borrowing?> getById(String id);
 
+  /// Live feed of every borrowing visible to the current user. Re-emits
+  /// the full list whenever a row is inserted, updated, or deleted on the
+  /// `borrowings` table. RLS does the scoping automatically — students
+  /// see only their own, admins see all. The mock implementation returns
+  /// an empty stream (the controller manages its own in-memory state for
+  /// the offline demo).
+  Stream<List<Borrowing>> watchAll();
+
   // ── Student actions ─────────────────────────────────────────────────
   /// Create a new pending borrowing request. Returns the freshly-inserted
   /// row so the controller can move it into `pendingBorrowings` without
@@ -70,6 +78,9 @@ class MockBorrowingsRepository implements BorrowingsRepository {
 
     return find(_active) ?? find(_overdue) ?? find(_pending) ?? find(_history);
   }
+
+  @override
+  Stream<List<Borrowing>> watchAll() => const Stream.empty();
 
   // ── Student: create a new pending request ─────────────────────────
   @override

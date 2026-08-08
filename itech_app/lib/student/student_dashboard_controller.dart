@@ -31,10 +31,13 @@ class StudentDashboardController extends ChangeNotifier {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       notifyListeners();
     });
-    // The live-occupancy feed is real data now (read from the
-    // `active_sessions` table on the Supabase bundle) so the old
-    // in-memory rotator is gone. Pull-to-refresh on the Live tab will
-    // call `loadActiveSessions()` to fetch the latest rows.
+    // Start the borrowings Realtime feed immediately so cross-device
+    // updates land as soon as the controller exists — the first emit
+    // also gives us the initial state, so we don't have to wait for
+    // `load()` to finish before the UI has data. The notifications
+    // subscription is still started inside `load()` to keep the
+    // existing flow intact.
+    _startBorrowingsSubscription();
   }
 
   /// All CRUD goes through this bundle. The shell is responsible for
@@ -119,6 +122,15 @@ class StudentDashboardController extends ChangeNotifier {
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
 
   StreamSubscription<List<AppNotification>>? _notificationsSubscription;
+
+  // ── Borrowings (live feed from Supabase Realtime) ───────────────────
+  // A single subscription to the `borrowings` table. Every INSERT / UPDATE
+  // / DELETE the current user is allowed to see (per RLS) re-emits the
+  // full list, which we re-partition into the four status buckets. This
+  // is what makes the admin's "Pending Requests" list update on the
+  // student's phone the moment a request lands — no app restart needed,
+  // works across devices.
+  StreamSubscription<List<Borrowing>>? _borrowingsSubscription;
 
   int _unread = 0;
   int get unreadCount => _unread;
@@ -213,10 +225,16 @@ class StudentDashboardController extends ChangeNotifier {
       ]);
 
       _equipment = results[0] as List<Equipment>;
-      _activeBorrowings = results[1] as List<Borrowing>;
-      _pendingBorrowings = results[2] as List<Borrowing>;
-      _historyBorrowings = results[3] as List<Borrowing>;
-      _overdueBorrowings = results[4] as List<Borrowing>;
+      // Partition the four fetched buckets through the same helper the
+      // Realtime subscription uses. Single source of truth for the
+      // active / pending / overdue / history split, so the initial load
+      // and a Realtime emit can never disagree on what a row belongs to.
+      _partitionBorrowings([
+        ...results[1] as List<Borrowing>,
+        ...results[2] as List<Borrowing>,
+        ...results[3] as List<Borrowing>,
+        ...results[4] as List<Borrowing>,
+      ]);
       _notifications = results[5] as List<AppNotification>;
       _userProfile = results[6] as UserProfile?;
       _activeSessions = results[7] as List<ActiveSession>;
@@ -248,6 +266,51 @@ class StudentDashboardController extends ChangeNotifier {
         debugPrint('Notification realtime subscription failed: $error');
       },
     );
+  }
+
+  /// Subscribes to the `borrowings` Realtime channel. RLS scopes the
+  /// stream automatically — students see only their own rows, admins
+  /// see everything. The first emit carries the current snapshot, so
+  /// the four buckets get populated without waiting for `load()` to
+  /// finish its REST round-trip.
+  ///
+  /// When the device is offline or the WebSocket drops, the Supabase
+  /// client auto-reconnects with exponential backoff, so this single
+  /// subscription is enough to keep the cross-device UI live for the
+  /// lifetime of the controller.
+  void _startBorrowingsSubscription() {
+    if (_borrowingsSubscription != null) return;
+    _borrowingsSubscription = bundle.borrowings.watchAll().listen(
+      (all) {
+        _partitionBorrowings(all);
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Borrowings realtime subscription failed: $error');
+      },
+    );
+  }
+
+  /// Splits a flat list of borrowings into the four status buckets the
+  /// UI expects. Called from both the initial `load()` and the Realtime
+  /// subscription, so the partitioning logic only lives in one place.
+  void _partitionBorrowings(List<Borrowing> all) {
+    _activeBorrowings = all
+        .where((b) => b.status == BorrowingStatus.active)
+        .toList(growable: false);
+    _pendingBorrowings = all
+        .where((b) => b.status == BorrowingStatus.pending)
+        .toList(growable: false);
+    _overdueBorrowings = all
+        .where((b) => b.status == BorrowingStatus.overdue)
+        .toList(growable: false);
+    _historyBorrowings = all
+        .where(
+          (b) =>
+              b.status == BorrowingStatus.returned ||
+              b.status == BorrowingStatus.rejected,
+        )
+        .toList(growable: false);
   }
 
   /// Wrapped in a separate function so a single failing call doesn't
@@ -600,6 +663,7 @@ class StudentDashboardController extends ChangeNotifier {
     _ticker?.cancel();
     _searchDebounceTimer?.cancel();
     _notificationsSubscription?.cancel();
+    _borrowingsSubscription?.cancel();
     super.dispose();
   }
 }

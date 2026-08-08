@@ -109,6 +109,36 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     return _fromRow(row);
   }
 
+  /// Live feed of every borrowing visible to the current user. The
+  /// Supabase Flutter client opens a WebSocket to the Realtime server and
+  /// pushes a fresh snapshot of the `borrowings` table every time a row
+  /// is inserted, updated, or deleted. RLS policies on the `borrowings`
+  /// table scope the result: students get only their own rows, admins
+  /// get everything.
+  ///
+  /// The migration `0001_initial_schema.sql` already added `borrowings` to
+  /// the `supabase_realtime` publication, so no further DB work is needed
+  /// — this method just subscribes to the existing channel.
+  ///
+  /// Returns an empty stream when the user is signed out so callers don't
+  /// have to special-case the unauthenticated state.
+  @override
+  Stream<List<Borrowing>> watchAll() {
+    if (_client.auth.currentUser == null) {
+      return const Stream.empty();
+    }
+    return _client
+        .from('borrowings')
+        .stream(primaryKey: ['id'])
+        .map((rows) {
+          final borrowings = rows.map(_fromRow).toList();
+          // Newest first — matches the ordering of `getPending` and
+          // `getHistory`, so the UI doesn't jump on every realtime emit.
+          borrowings.sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
+          return List<Borrowing>.unmodifiable(borrowings);
+        });
+  }
+
   @override
   Future<Borrowing> create({
     required String equipmentId,
