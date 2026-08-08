@@ -128,14 +128,14 @@ class _LaunchLoaderState extends State<LaunchLoader>
                   opacity: _opacity.value,
                   child: Transform.scale(
                     scale: _scale.value,
-                    // Material's build_rounded is a spanner/wrench glyph,
-                    // font-based, scales perfectly with Transform.scale,
-                    // and avoids the path-translation bugs the
-                    // CustomPainter / SVG approaches kept hitting.
-                    child: const Icon(
-                      Icons.build_rounded,
-                      size: 124,
-                      color: PupColors.cyberAmber,
+                    // Raster asset so we don't depend on the Material
+                    // icon font at runtime (a missing-glyph fallback was
+                    // rendering as a yellow square on the live build).
+                    child: Image.asset(
+                      'assets/branding/launch_wrench.png',
+                      width: 124,
+                      height: 124,
+                      filterQuality: FilterQuality.high,
                     ),
                   ),
                 ),
