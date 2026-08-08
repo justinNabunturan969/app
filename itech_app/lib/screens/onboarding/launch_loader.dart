@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../auth/session/auth_session_storage.dart';
 import '../../main.dart';
 import '../../theme/design_tokens.dart';
-import '../../widgets/wrench_icon.dart';
 
 /// Branded launch loader — replaces the boring progress-bar with a smooth
 /// zoom-in of the PUP-ITech wrench.
@@ -129,7 +128,12 @@ class _LaunchLoaderState extends State<LaunchLoader>
                   opacity: _opacity.value,
                   child: Transform.scale(
                     scale: _scale.value,
-                    child: const WrenchIcon(
+                    // Material's build_rounded is a spanner/wrench glyph,
+                    // font-based, scales perfectly with Transform.scale,
+                    // and avoids the path-translation bugs the
+                    // CustomPainter / SVG approaches kept hitting.
+                    child: const Icon(
+                      Icons.build_rounded,
                       size: 124,
                       color: PupColors.cyberAmber,
                     ),
