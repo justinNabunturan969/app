@@ -1,13 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../theme/design_tokens.dart';
 
 /// Crisp vector wrench used on the launch loader.
 ///
-/// Replaces the raster PNG, which shipped with a baked-in checkerboard
-/// background instead of real transparency.
+/// Draws the classic open-end spanner silhouette (Material "build" glyph)
+/// with a CustomPainter so rendering never depends on the icon font.
 class LaunchWrenchIcon extends StatelessWidget {
   const LaunchWrenchIcon({
     super.key,
@@ -35,15 +33,19 @@ class _LaunchWrenchPainter extends CustomPainter {
 
   final Color color;
 
+  static const _viewBox = 24.0;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(-math.pi / 4);
-    canvas.translate(-center.dx, -center.dy);
+    final scale = size.shortestSide / _viewBox;
+    final dx = (size.width - _viewBox * scale) / 2;
+    final dy = (size.height - _viewBox * scale) / 2;
 
-    final wrench = _wrenchPath(size);
+    canvas.save();
+    canvas.translate(dx, dy);
+    canvas.scale(scale);
+
+    final wrench = _wrenchPath();
     final bounds = wrench.getBounds();
 
     canvas.drawPath(
@@ -65,7 +67,7 @@ class _LaunchWrenchPainter extends CustomPainter {
       wrench,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * 0.018
+        ..strokeWidth = 0.6
         ..strokeJoin = StrokeJoin.round
         ..color = Colors.white.withValues(alpha: 0.22),
     );
@@ -73,37 +75,22 @@ class _LaunchWrenchPainter extends CustomPainter {
     canvas.restore();
   }
 
-  Path _wrenchPath(Size size) {
-    final w = size.width;
-    final h = size.height;
-    const r = 5.0;
-
-    // Open-end wrench aligned diagonally inside the view box.
+  /// Open-end spanner path from the Material "build" icon (24x24 viewBox).
+  Path _wrenchPath() {
     return Path()
-      ..moveTo(w * 0.20, h * 0.36)
-      ..quadraticBezierTo(w * 0.11, h * 0.27, w * 0.20, h * 0.18)
-      ..quadraticBezierTo(w * 0.28, h * 0.10, w * 0.36, h * 0.18)
-      ..lineTo(w * 0.32, h * 0.22)
-      ..lineTo(w * 0.38, h * 0.28)
-      ..lineTo(w * 0.42, h * 0.24)
-      ..lineTo(w * 0.76, h * 0.58)
-      ..arcToPoint(
-        Offset(w * 0.82, h * 0.66),
-        radius: const Radius.circular(r),
-      )
-      ..lineTo(w * 0.78, h * 0.82)
-      ..arcToPoint(
-        Offset(w * 0.70, h * 0.86),
-        radius: const Radius.circular(r),
-      )
-      ..lineTo(w * 0.62, h * 0.78)
-      ..arcToPoint(
-        Offset(w * 0.66, h * 0.70),
-        radius: const Radius.circular(r),
-      )
-      ..lineTo(w * 0.30, h * 0.34)
-      ..lineTo(w * 0.26, h * 0.38)
-      ..lineTo(w * 0.20, h * 0.32)
+      ..moveTo(22.7, 19.0)
+      ..lineTo(13.6, 9.9)
+      ..cubicTo(14.5, 7.6, 14.0, 4.9, 12.1, 3.0)
+      ..cubicTo(10.1, 1.0, 7.1, 0.6, 4.7, 1.8)
+      ..lineTo(9.0, 6.0)
+      ..lineTo(6.0, 9.0)
+      ..lineTo(1.6, 4.7)
+      ..cubicTo(0.4, 7.1, 0.9, 10.1, 2.9, 12.1)
+      ..cubicTo(4.8, 14.0, 7.5, 14.5, 9.8, 13.6)
+      ..lineTo(18.9, 22.7)
+      ..cubicTo(19.3, 23.1, 19.9, 23.1, 20.3, 22.7)
+      ..lineTo(22.6, 20.4)
+      ..cubicTo(23.1, 20.0, 23.1, 19.3, 22.7, 19.0)
       ..close();
   }
 
