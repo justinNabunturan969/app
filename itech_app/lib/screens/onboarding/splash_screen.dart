@@ -5,8 +5,9 @@ import '../../theme/design_tokens.dart';
 
 /// A minimal, branded entry moment before the welcome screen.
 ///
-/// The welcome-page mark scales into place at the center of the display,
-/// rather than showing a conventional progress indicator.
+/// The PUP-ITech mark fills the center of the display, zooms in, then settles
+/// before the welcome page appears. There is deliberately no text or progress
+/// control competing with the mark.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -29,12 +30,24 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _markOpacity = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+      curve: const Interval(0.0, 0.30, curve: Curves.easeOut),
     );
-    _markScale = Tween<double>(
-      begin: 0.35,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _markScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 0.12,
+          end: 1.08,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 72,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(
+          begin: 1.08,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 28,
+      ),
+    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _playIntro();
   }
 
@@ -52,45 +65,23 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF08090B),
-      body: _LaunchMark(),
-    );
-  }
-}
-
-class _LaunchMark extends StatelessWidget {
-  const _LaunchMark();
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.findAncestorStateOfType<_SplashScreenState>()!;
-    return Center(
-      child: FadeTransition(
-        opacity: state._markOpacity,
-        child: ScaleTransition(
-          scale: state._markScale,
-          child: Container(
-            width: 124,
-            height: 124,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: PupColors.cyberAmber.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: PupColors.cyberAmber.withValues(alpha: 0.18),
-                  blurRadius: 42,
-                  spreadRadius: 8,
+    return Scaffold(
+      backgroundColor: const Color(0xFF08090B),
+      body: Center(
+        child: FadeTransition(
+          opacity: _markOpacity,
+          child: ScaleTransition(
+            scale: _markScale,
+            child: SizedBox(
+              width: 112,
+              height: 112,
+              child: ColorFiltered(
+                colorFilter: const ColorFilter.mode(
+                  PupColors.cyberAmber,
+                  BlendMode.srcIn,
                 ),
-              ],
-            ),
-            child: ColorFiltered(
-              colorFilter: const ColorFilter.mode(
-                PupColors.cyberAmber,
-                BlendMode.srcIn,
+                child: Image.asset('assets/branding/pup_itech_source_icon.png'),
               ),
-              child: Image.asset('assets/branding/pup_itech_source_icon.png'),
             ),
           ),
         ),
