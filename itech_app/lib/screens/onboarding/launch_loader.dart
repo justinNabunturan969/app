@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/session/auth_session_storage.dart';
 import '../../main.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/wrench_icon.dart';
 
 /// Branded launch loader — replaces the boring progress-bar with a smooth
 /// zoom-in of the PUP-ITech wrench.
@@ -129,16 +129,9 @@ class _LaunchLoaderState extends State<LaunchLoader>
                   opacity: _opacity.value,
                   child: Transform.scale(
                     scale: _scale.value,
-                    child: SizedBox(
-                      width: 124,
-                      height: 124,
-                      child: SvgPicture.asset(
-                        'assets/branding/launch_wrench.svg',
-                        colorFilter: const ColorFilter.mode(
-                          PupColors.cyberAmber,
-                          BlendMode.srcIn,
-                        ),
-                      ),
+                    child: const WrenchIcon(
+                      size: 124,
+                      color: PupColors.cyberAmber,
                     ),
                   ),
                 ),
