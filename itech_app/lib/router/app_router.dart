@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/session/auth_session_storage.dart';
+import '../screens/onboarding/launch_loader.dart';
 import '../screens/onboarding/splash_screen.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/role_selection/role_selection_screen.dart';
@@ -31,6 +32,17 @@ class AppRouter {
         name: 'splash',
         pageBuilder: (context, state) =>
             _fadeScalePage(key: state.pageKey, child: const SplashScreen()),
+      ),
+      // Post-auth / every-cold-start loader. Shows the wrench zoom
+      // animation, then routes to the right home shell based on role.
+      // Logged-out users are redirected away (see _redirect below).
+      GoRoute(
+        path: '/launching',
+        name: 'launching',
+        pageBuilder: (context, state) => _fadeScalePage(
+          key: state.pageKey,
+          child: const LaunchLoader(),
+        ),
       ),
       GoRoute(
         path: '/welcome',
@@ -114,8 +126,13 @@ class AppRouter {
     };
 
     if (loggedIn && role != null) {
+      // /launching is self-terminating (the loader screen navigates to
+      // the right shell on its own) — don't redirect away from it.
+      if (loc == '/launching') return null;
       if (authEntryRoutes.contains(loc)) {
-        return role == UserRole.student ? '/student/shell' : '/admin/shell';
+        // Every cold start with a valid session gets the zoom intro
+        // before the home shell mounts.
+        return '/launching';
       }
       if (loc.startsWith('/student/') && role != UserRole.student) {
         return '/admin/shell';
@@ -126,7 +143,7 @@ class AppRouter {
       return null;
     }
 
-    if (loc == '/student/shell' || loc == '/admin/shell') {
+    if (loc == '/student/shell' || loc == '/admin/shell' || loc == '/launching') {
       return '/role';
     }
 

@@ -122,7 +122,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
       );
       if (!mounted) return;
       setState(() => _loading = false);
-      context.go('/student/shell');
+      context.go('/launching');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
