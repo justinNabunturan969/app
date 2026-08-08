@@ -3,6 +3,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../theme/design_tokens.dart';
 
+/// A minimal, branded entry moment before the welcome screen.
+///
+/// The welcome-page mark scales into place at the center of the display,
+/// rather than showing a conventional progress indicator.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -13,35 +17,31 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _logoOpacity;
-  late final Animation<double> _logoScale;
+  late final Animation<double> _markOpacity;
+  late final Animation<double> _markScale;
 
   @override
   void initState() {
     super.initState();
-
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(milliseconds: 1350),
     );
-
-    _logoOpacity = CurvedAnimation(
+    _markOpacity = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeInOut),
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
     );
-    _logoScale = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeOutCubic),
-      ),
-    );
+    _markScale = Tween<double>(
+      begin: 0.35,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _playIntro();
+  }
 
-    _controller.forward();
-
-    Future<void>.delayed(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      context.go('/welcome');
-    });
+  Future<void> _playIntro() async {
+    await _controller.forward();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (mounted) context.go('/welcome');
   }
 
   @override
@@ -52,73 +52,46 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
+    return const Scaffold(
+      backgroundColor: Color(0xFF08090B),
+      body: _LaunchMark(),
+    );
+  }
+}
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [PupColors.pupMaroon, PupColors.deepMahogany],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              const Spacer(flex: 3),
-              Center(
-                child: FadeTransition(
-                  opacity: _logoOpacity,
-                  child: ScaleTransition(
-                    scale: _logoScale,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.build_rounded,
-                          color: PupColors.cyberAmber,
-                          size: 72,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'PUP-ITech',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+class _LaunchMark extends StatelessWidget {
+  const _LaunchMark();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.findAncestorStateOfType<_SplashScreenState>()!;
+    return Center(
+      child: FadeTransition(
+        opacity: state._markOpacity,
+        child: ScaleTransition(
+          scale: state._markScale,
+          child: Container(
+            width: 124,
+            height: 124,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: PupColors.cyberAmber.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: PupColors.cyberAmber.withValues(alpha: 0.18),
+                  blurRadius: 42,
+                  spreadRadius: 8,
                 ),
+              ],
+            ),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.mode(
+                PupColors.cyberAmber,
+                BlendMode.srcIn,
               ),
-              const Spacer(),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: mq.size.width * 0.1),
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, _) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 8,
-                        value: _controller.value,
-                        backgroundColor: Colors.white.withValues(alpha: 0.18),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          PupColors.cyberAmber,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
+              child: Image.asset('assets/branding/pup_itech_source_icon.png'),
+            ),
           ),
         ),
       ),
