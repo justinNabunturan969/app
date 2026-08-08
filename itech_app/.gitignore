@@ -30,7 +30,12 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+# Ignore the Flutter build directory EXCEPT build/web/, which is what
+# Vercel serves as the production artifact. Committing only the web
+# output keeps the repo lean while letting auto-deploys skip the build
+# step on Vercel.
 /build/
+!/build/web/
 /coverage/
 
 # Local Supabase runtime configuration. Keep real credentials on your machine.
