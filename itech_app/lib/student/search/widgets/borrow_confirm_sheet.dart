@@ -89,6 +89,16 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
     if (raw.contains('JWT') || raw.contains('Auth')) {
       return "Your session has expired. Please log in again.";
     }
+    // The unique index `borrowings_one_open_request_per_student_item`
+    // (added in migration 0003) blocks a second open request for the
+    // same equipment. Surface it as actionable text instead of the
+    // raw Postgres message.
+    if (raw.contains('duplicate key') ||
+        raw.contains('borrowings_one_open_request_per_student_item') ||
+        raw.contains('23505')) {
+      return "You already have a pending or active request for this item. "
+          'Return it or cancel it first, then try again.';
+    }
     return "Something went wrong submitting your request. Please try again.";
   }
 
@@ -98,6 +108,16 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final available = e.available > 0;
     final tone = available ? PupColors.techCyan : PupColors.signalRed;
+
+    // Pre-flight check: the DB has a unique index that blocks a second
+    // open request for the same (student, equipment). If the controller
+    // already has a matching active or pending row, surface that here
+    // so the user never gets the raw Postgres error.
+    final ctrl = context.watch<StudentDashboardController>();
+    final hasOpenRequest = ctrl.activeBorrowings.any(
+          (b) => b.equipmentId == e.id,
+        ) ||
+        ctrl.pendingBorrowings.any((b) => b.equipmentId == e.id);
 
     final viewInsets = MediaQuery.of(context).viewInsets;
 
@@ -138,14 +158,23 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
                   enabled: !_submitting,
                 ),
                 const SizedBox(height: 16),
+                if (hasOpenRequest && _error == null)
+                  _ErrorBanner(
+                    message:
+                        "You already have an open request for this item. "
+                        'Return it first or wait for admin to process it.',
+                  ),
                 if (_error != null) _ErrorBanner(message: _error!),
                 _ActionRow(
                   submitting: _submitting,
                   available: available,
+                  hasOpenRequest: hasOpenRequest,
                   onCancel: _submitting
                       ? null
                       : () => Navigator.of(context).pop(),
-                  onSubmit: _submitting || !available ? null : _submit,
+                  onSubmit: (_submitting || !available || hasOpenRequest)
+                      ? null
+                      : _submit,
                 ),
               ],
             ),
@@ -445,14 +474,32 @@ class _ActionRow extends StatelessWidget {
   const _ActionRow({
     required this.submitting,
     required this.available,
+    required this.hasOpenRequest,
     required this.onCancel,
     required this.onSubmit,
   });
 
   final bool submitting;
   final bool available;
+  final bool hasOpenRequest;
   final VoidCallback? onCancel;
   final VoidCallback? onSubmit;
+
+  // Effective enable state for the primary action. Out of stock and
+  // already-on-loan states both disable the button.
+  bool get _canSubmit => available && !submitting && !hasOpenRequest;
+
+  String get _label {
+    if (hasOpenRequest) return 'Already Requested';
+    if (!available) return 'Out of Stock';
+    return 'Submit Request';
+  }
+
+  IconData get _icon {
+    if (hasOpenRequest) return Icons.lock_outline_rounded;
+    if (!available) return Icons.block_rounded;
+    return Icons.outbox_rounded;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -497,13 +544,13 @@ class _ActionRow extends StatelessWidget {
               onPressed: onSubmit,
               style: FilledButton.styleFrom(
                 backgroundColor:
-                    available ? PupColors.cyberAmber : PupColors.ashGray,
+                    _canSubmit ? PupColors.cyberAmber : PupColors.ashGray,
                 foregroundColor: const Color(0xFF1B1B1B),
                 disabledBackgroundColor: PupColors.ashGray.withValues(alpha: 0.4),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: available && !submitting ? 2 : 0,
+                elevation: _canSubmit ? 2 : 0,
                 shadowColor: PupColors.cyberAmber.withValues(alpha: 0.5),
               ),
               child: submitting
@@ -519,15 +566,10 @@ class _ActionRow extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          available
-                              ? Icons.outbox_rounded
-                              : Icons.block_rounded,
-                          size: 18,
-                        ),
+                        Icon(_icon, size: 18),
                         const SizedBox(width: 6),
                         Text(
-                          available ? 'Submit Request' : 'Out of Stock',
+                          _label,
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 13.5,

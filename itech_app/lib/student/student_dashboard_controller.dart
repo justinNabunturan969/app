@@ -258,7 +258,10 @@ class StudentDashboardController extends ChangeNotifier {
     if (_notificationsSubscription != null) return;
     _notificationsSubscription = bundle.notifications.watch().listen(
       (notifications) {
-        _notifications = notifications;
+        // The stream hands us a List.unmodifiable(...) — keep our own
+        // mutable copy so markRead / delete / restore can mutate it
+        // without throwing "Cannot modify an unmodifiable list".
+        _notifications = List.of(notifications);
         _recalcUnread();
         notifyListeners();
       },
