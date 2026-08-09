@@ -76,49 +76,64 @@ class _AdminPendingRequestsScreenState
         return Scaffold(
           body: SafeArea(
             bottom: false,
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Pending Requests',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: primaryText,
-                                ),
-                              ),
-                            ),
-                            if (pendingCount > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: PupColors.cyberAmber,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
+            child: RefreshIndicator(
+              color: PupColors.cyberAmber,
+              backgroundColor: theme.colorScheme.surface,
+              // Pull-to-refresh forces a borrowings refetch so the admin
+              // can manually catch up if a realtime event was missed.
+              // Without this, the only recovery from a stale list was
+              // a full app restart.
+              onRefresh: () => ctrl.refreshBorrowings(),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
                                 child: Text(
-                                  '$pendingCount',
-                                  style: const TextStyle(
-                                    color: Color(0xFF1B1B1B),
+                                  'Pending Requests',
+                                  style: TextStyle(
+                                    fontSize: 22,
                                     fontWeight: FontWeight.w900,
-                                    fontSize: 12,
+                                    color: primaryText,
                                   ),
                                 ),
                               ),
-                            const SizedBox(width: 8),
-                            const ThemeMenuButton(),
-                          ],
-                        ),
+                              if (pendingCount > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: PupColors.cyberAmber,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    '$pendingCount',
+                                    style: const TextStyle(
+                                      color: Color(0xFF1B1B1B),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 6),
+                              // Explicit refresh button — the same
+                              // hook the periodic poll and pull-to-refresh
+                              // call. Gives the admin a one-tap way to
+                              // catch up without restarting the app.
+                              _RefreshButton(onPressed: ctrl.refreshBorrowings),
+                              const SizedBox(width: 4),
+                              const ThemeMenuButton(),
+                            ],
+                          ),
                         const SizedBox(height: 2),
                         Text(
                           pendingCount == 0
@@ -194,6 +209,7 @@ class _AdminPendingRequestsScreenState
                     ),
                   ),
               ],
+              ),
             ),
           ),
         );
@@ -749,6 +765,76 @@ class _StatusPill extends StatelessWidget {
           fontWeight: FontWeight.w900,
           fontSize: 10,
           letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact icon-only refresh button. One tap calls
+/// `StudentDashboardController.refreshBorrowings()` so the admin can
+/// catch up on a missed realtime event without restarting the app.
+/// The button is disabled (and shows a spinning ring) while a refresh
+/// is already in flight, so accidental double-taps don't pile up
+/// duplicate requests.
+class _RefreshButton extends StatefulWidget {
+  const _RefreshButton({required this.onPressed});
+
+  final Future<void> Function() onPressed;
+
+  @override
+  State<_RefreshButton> createState() => _RefreshButtonState();
+}
+
+class _RefreshButtonState extends State<_RefreshButton> {
+  bool _busy = false;
+
+  Future<void> _handle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await widget.onPressed();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final tint = PupColors.cyberAmber;
+    return Tooltip(
+      message: 'Refresh requests',
+      child: InkResponse(
+        radius: 22,
+        onTap: _busy ? null : _handle,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark
+                ? tint.withValues(alpha: 0.12)
+                : tint.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark
+                  ? tint.withValues(alpha: 0.4)
+                  : tint.withValues(alpha: 0.3),
+              width: 0.8,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: _busy
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(tint),
+                  ),
+                )
+              : Icon(Icons.refresh_rounded, color: tint, size: 20),
         ),
       ),
     );

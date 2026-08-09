@@ -165,6 +165,18 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
         .asyncMap((_) => _listAllWithJoins());
   }
 
+  /// One-shot refresh — same join + RLS scope as the realtime stream,
+  /// but synchronous (one query, one response). The controller's
+  /// 15-second poll calls this so the admin's queue is never more than
+  /// 15s stale even if a realtime event is dropped on the floor.
+  @override
+  Future<List<Borrowing>> watchAllSnapshot() {
+    if (_client.auth.currentUser == null) {
+      return Future.value(const <Borrowing>[]);
+    }
+    return _listAllWithJoins();
+  }
+
   @override
   Future<Borrowing> create({
     required String equipmentId,

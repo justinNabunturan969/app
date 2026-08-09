@@ -24,6 +24,13 @@ abstract class BorrowingsRepository {
   /// the offline demo).
   Stream<List<Borrowing>> watchAll();
 
+  /// One-shot snapshot of every borrowing visible to the current user
+  /// (same RLS scope as `watchAll`). Used by the periodic poll and by
+  /// manual pull-to-refresh — both want a fresh "now" view without
+  /// subscribing to a stream. Falls back to the in-memory state in
+  /// the mock implementation.
+  Future<List<Borrowing>> watchAllSnapshot();
+
   // ── Student actions ─────────────────────────────────────────────────
   /// Create a new pending borrowing request. Returns the freshly-inserted
   /// row so the controller can move it into `pendingBorrowings` without
@@ -82,6 +89,16 @@ class MockBorrowingsRepository implements BorrowingsRepository {
 
   @override
   Stream<List<Borrowing>> watchAll() => const Stream.empty();
+
+  @override
+  Future<List<Borrowing>> watchAllSnapshot() async {
+    return [
+      ..._active,
+      ..._overdue,
+      ..._pending,
+      ..._history,
+    ];
+  }
 
   // ── Student: create a new pending request ─────────────────────────
   @override

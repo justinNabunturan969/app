@@ -40,6 +40,20 @@ class StudentDashboardController extends ChangeNotifier {
     // existing flow intact.
     _startBorrowingsSubscription();
     _startActiveSessionsSubscription();
+    // Safety net for the borrowings Realtime feed. The Supabase
+    // `.stream()` API is supposed to deliver an event for every
+    // INSERT / UPDATE / DELETE the current user is allowed to see, but
+    // in practice (esp. on web behind flaky WebSockets) the channel
+    // can silently stop emitting new rows. Without this poll, the
+    // admin's Pending Requests list would only refresh when the app
+    // is restarted, which is exactly the bug the realtime feed was
+    // supposed to fix. A short periodic refetch keeps the queue
+    // current even if a realtime event is missed.
+    _borrowingsRefreshTimer?.cancel();
+    _borrowingsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshBorrowingsQuietly(),
+    );
   }
 
   /// All CRUD goes through this bundle. The shell is responsible for
@@ -151,6 +165,12 @@ class StudentDashboardController extends ChangeNotifier {
   // student's phone the moment a request lands — no app restart needed,
   // works across devices.
   StreamSubscription<List<Borrowing>>? _borrowingsSubscription;
+
+  // Belt-and-suspenders for the borrowings feed: even if the Realtime
+  // channel silently drops events (network blip, WebSocket sleep, the
+  // browser throttling background tabs), this 15-second poll guarantees
+  // the admin's queue is never more than 15s stale.
+  Timer? _borrowingsRefreshTimer;
 
   int _unread = 0;
   int get unreadCount => _unread;
@@ -434,6 +454,37 @@ class StudentDashboardController extends ChangeNotifier {
       },
     );
   }
+
+  /// Fetches the current borrowings snapshot and republishes it. Cheap
+  /// (`select` on the indexed table, joined rows only) and idempotent —
+  /// the partition step is pure, so re-running it with the same data is
+  /// a no-op except for the `notifyListeners()` call. This is the
+  /// fallback path when the Realtime channel is connected but missed
+  /// an event (e.g. the WebSocket was idle for a moment, the device
+  /// woke from sleep, the user was on a different tab).
+  Future<void> _refreshBorrowingsQuietly() async {
+    try {
+      final all = await bundle.borrowings.watchAllSnapshot();
+      if (all.isEmpty && _pendingBorrowings.isEmpty &&
+          _activeBorrowings.isEmpty && _overdueBorrowings.isEmpty &&
+          _historyBorrowings.isEmpty) {
+        // Don't clobber an empty initial state with an empty result
+        // from a transient RLS / network failure mid-load.
+        return;
+      }
+      _partitionBorrowings(all);
+      notifyListeners();
+    } catch (e) {
+      // Quiet failure — the next poll (or the realtime event) will
+      // catch up. Don't surface this to the UI as an error banner.
+      debugPrint('Periodic borrowings refresh failed: $e');
+    }
+  }
+
+  /// Public hook so admin screens can force a refresh on demand (e.g.
+  /// from a pull-to-refresh or an explicit refresh button) without
+  /// waiting for the next periodic tick.
+  Future<void> refreshBorrowings() => _refreshBorrowingsQuietly();
 
   /// Splits a flat list of borrowings into the four status buckets the
   /// UI expects. Called from both the initial `load()` and the Realtime
@@ -819,6 +870,7 @@ class StudentDashboardController extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _borrowingsRefreshTimer?.cancel();
     _searchDebounceTimer?.cancel();
     _notificationsSubscription?.cancel();
     _borrowingsSubscription?.cancel();

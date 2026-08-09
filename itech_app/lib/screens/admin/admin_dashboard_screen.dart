@@ -58,12 +58,14 @@ class AdminDashboardScreen extends StatelessWidget {
             bottom: false,
             child: RefreshIndicator(
               onRefresh: () async {
-                await Future<void>.delayed(const Duration(milliseconds: 500));
-                if (context.mounted) {
-                  // Trigger a re-build so any countdown-driven values
-                  // refresh visually after the pull gesture.
-                  (context as Element).markNeedsBuild();
-                }
+                // Pull-to-refresh kicks a real borrowings refetch. The
+                // periodic 15s poll is the background safety net, but
+                // an admin who's staring at the dashboard wants an
+                // immediate catch-up after the gesture.
+                await Future.wait([
+                  ctrl.refreshBorrowings(),
+                  ctrl.loadActiveSessions(),
+                ]);
               },
               color: PupColors.cyberAmber,
               backgroundColor: theme.colorScheme.surface,
