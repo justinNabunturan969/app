@@ -196,7 +196,9 @@ class StudentDashboardController extends ChangeNotifier {
       subtitle: '${removed.studentId} • Session terminated by admin',
     );
     try {
-      await bundle.user.removeOwnSession();
+      // Delete the *kicked* user's row, not the admin's own. The
+      // Supabase bundle gates this on the `is_admin()` RLS policy.
+      await bundle.user.removeSessionById(id);
     } catch (_) {
       // Mock bundle is a no-op; Supabase can fail on RLS, but the
       // local removal already gives the admin immediate feedback.

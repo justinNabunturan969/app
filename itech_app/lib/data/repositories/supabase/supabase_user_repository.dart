@@ -127,10 +127,10 @@ class SupabaseUserRepository implements UserRepository {
   }
 
   /// Removes the current user's row from `active_sessions` so the
-  /// Live tab stops showing them after they sign out. Errors are
-  /// swallowed — a stale row will eventually be cleaned up by the
-  /// admin via Force Logout, or by a future "last activity > 24h"
-  /// sweep.
+  /// Live tab stops showing them after they sign out (or after the
+  /// app is backgrounded / closed). Errors are swallowed — a stale
+  /// row will eventually be cleaned up by the admin via Force
+  /// Logout, or by a future "last activity > 24h" sweep.
   @override
   Future<void> removeOwnSession() async {
     final user = _client.auth.currentUser;
@@ -139,6 +139,44 @@ class SupabaseUserRepository implements UserRepository {
       await _client.from('active_sessions').delete().eq('profile_id', user.id);
     } catch (_) {
       // Best effort.
+    }
+  }
+
+  /// Re-registers the current user's `active_sessions` row, refreshing
+  /// the `last_activity_at` timestamp. Called on app launch and on
+  /// resume so a user who briefly backgrounded the app reappears on
+  /// the admin's Live tab.
+  @override
+  Future<void> markOwnSessionActive() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    try {
+      await _client.from('active_sessions').upsert({
+        'profile_id': user.id,
+        'logged_in_at': DateTime.now().toIso8601String(),
+        'last_activity_at': DateTime.now().toIso8601String(),
+        'activity': 'active',
+      });
+    } catch (_) {
+      // Best effort.
+    }
+  }
+
+  /// Admin-only: deletes a specific user's row in `active_sessions`.
+  /// RLS (the `is_admin()` policy on the table) gates the delete to
+  /// admins only — students calling this will get 0 rows affected
+  /// and the kicked row stays in place.
+  @override
+  Future<void> removeSessionById(String profileId) async {
+    if (profileId.isEmpty) return;
+    try {
+      await _client
+          .from('active_sessions')
+          .delete()
+          .eq('profile_id', profileId);
+    } catch (_) {
+      // Best effort. The local cache has already been updated, so
+      // the admin still sees the kick take effect on their own tab.
     }
   }
 }
