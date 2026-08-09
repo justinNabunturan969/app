@@ -280,6 +280,22 @@ class StudentDashboardController extends ChangeNotifier {
   bool _isOnlineToggling = false;
   bool get isOnlineToggleInProgress => _isOnlineToggling;
 
+  /// Last error from `goOnline` / `goOffline`. Surfaced in the UI as a
+  /// SnackBar — without this the toggle looks like a silent no-op when
+  /// the underlying RPC fails (e.g. RLS reject, network down,
+  /// `auth.uid()` is null because the session is half-hydrated).
+  String? _presenceError;
+  String? get presenceError => _presenceError;
+
+  /// Clears `presenceError`. The home screen calls this after showing
+  /// the SnackBar so the same error doesn't re-appear on the next
+  /// rebuild.
+  void clearPresenceError() {
+    if (_presenceError == null) return;
+    _presenceError = null;
+    notifyListeners();
+  }
+
   /// Explicitly create (or refresh) the student's own row in
   /// `active_sessions`. Idempotent — calling it while already online
   /// is a no-op for the local state but still pings the server so
@@ -287,6 +303,7 @@ class StudentDashboardController extends ChangeNotifier {
   Future<bool> goOnline() async {
     if (_isOnlineToggling) return false;
     _isOnlineToggling = true;
+    _presenceError = null;
     notifyListeners();
     try {
       await bundle.user.markOwnSessionActive();
@@ -308,7 +325,11 @@ class StudentDashboardController extends ChangeNotifier {
       );
       return true;
     } catch (e) {
+      // The repository no longer swallows errors, so a failure here
+      // is real. Surface it in the SnackBar so we can finally see
+      // *why* the toggle did nothing on the phone.
       debugPrint('goOnline failed: $e');
+      _presenceError = e.toString();
       return false;
     } finally {
       _isOnlineToggling = false;
@@ -321,6 +342,7 @@ class StudentDashboardController extends ChangeNotifier {
   Future<bool> goOffline() async {
     if (_isOnlineToggling) return false;
     _isOnlineToggling = true;
+    _presenceError = null;
     notifyListeners();
     try {
       await bundle.user.removeOwnSession();
@@ -340,6 +362,7 @@ class StudentDashboardController extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('goOffline failed: $e');
+      _presenceError = e.toString();
       return false;
     } finally {
       _isOnlineToggling = false;

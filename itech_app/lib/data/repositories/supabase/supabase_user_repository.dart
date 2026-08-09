@@ -170,21 +170,17 @@ class SupabaseUserRepository implements UserRepository {
 
   /// Removes the current user's row from `active_sessions` so the
   /// Live tab stops showing them after they sign out (or after the
-  /// app is backgrounded / closed). Errors are swallowed — a stale
-  /// row will eventually be cleaned up by the admin via Force
-  /// Logout, or by a future "last activity > 24h" sweep.
+  /// app is backgrounded / closed). Errors are rethrown so the
+  /// controller can surface them in the UI — silently swallowing
+  /// them left the "Go offline" toggle looking like a no-op.
   @override
   Future<void> removeOwnSession() async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    try {
-      await _client.rpc(
-        'end_active_session',
-        params: {'p_profile_id': user.id, 'p_reason': 'closed'},
-      );
-    } catch (_) {
-      // Best effort.
-    }
+    await _client.rpc(
+      'end_active_session',
+      params: {'p_profile_id': user.id, 'p_reason': 'closed'},
+    );
   }
 
   /// Re-registers the current user's `active_sessions` row.
@@ -202,13 +198,14 @@ class SupabaseUserRepository implements UserRepository {
   /// Called on app launch (in `SessionLifecycleGuard.initState`) and on
   /// the 30-second heartbeat, so a user who briefly backgrounded the
   /// app reappears on the admin's Live tab as soon as they come back.
+  ///
+  /// Errors are rethrown so the controller can show them to the user.
+  /// The previous `catch (_) {}` silently swallowed every failure,
+  /// which made "tap the toggle, nothing happens" impossible to
+  /// diagnose from the UI.
   @override
   Future<void> markOwnSessionActive() async {
-    try {
-      await _client.rpc('start_active_session');
-    } catch (_) {
-      // Best effort.
-    }
+    await _client.rpc('start_active_session');
   }
 
   /// Admin-only: deletes a specific user's row in `active_sessions`.
@@ -218,14 +215,9 @@ class SupabaseUserRepository implements UserRepository {
   @override
   Future<void> removeSessionById(String profileId) async {
     if (profileId.isEmpty) return;
-    try {
-      await _client.rpc(
-        'end_active_session',
-        params: {'p_profile_id': profileId, 'p_reason': 'force_logout'},
-      );
-    } catch (_) {
-      // Best effort. The local cache has already been updated, so
-      // the admin still sees the kick take effect on their own tab.
-    }
+    await _client.rpc(
+      'end_active_session',
+      params: {'p_profile_id': profileId, 'p_reason': 'force_logout'},
+    );
   }
 }

@@ -167,6 +167,16 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                   }
                                 },
                               ),
+                              // Surface the underlying RPC error in a
+                              // SnackBar so a failing toggle doesn't look
+                              // like a silent no-op. Cleared after the
+                              // first show so the same message doesn't
+                              // re-appear on every rebuild.
+                              if (ctrl.presenceError != null)
+                                _PresenceErrorListener(
+                                  error: ctrl.presenceError!,
+                                  onShown: ctrl.clearPresenceError,
+                                ),
                               const SizedBox(height: 12),
                               // 3-up stats row (no horizontal scroll)
                               Row(
@@ -649,6 +659,66 @@ class _PulseDotState extends State<_PulseDot>
       },
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Presence error listener — renders nothing, just shows a SnackBar the
+// first time `error` changes. Calls `onShown` after the SnackBar is
+// dispatched so the controller can clear its `presenceError` field
+// and the same error doesn't re-fire on every rebuild.
+// ─────────────────────────────────────────────────────────────────────────
+
+class _PresenceErrorListener extends StatefulWidget {
+  const _PresenceErrorListener({required this.error, required this.onShown});
+
+  final String error;
+  final VoidCallback onShown;
+
+  @override
+  State<_PresenceErrorListener> createState() => _PresenceErrorListenerState();
+}
+
+class _PresenceErrorListenerState extends State<_PresenceErrorListener> {
+  String? _shown;
+
+  @override
+  void didUpdateWidget(covariant _PresenceErrorListener oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.error != _shown) _maybeShow();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShow());
+  }
+
+  void _maybeShow() {
+    final err = widget.error;
+    if (err == _shown) return;
+    _shown = err;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: PupColors.signalRed,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
+        content: Text(
+          'Couldn\'t update your status: $err',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+    widget.onShown();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
