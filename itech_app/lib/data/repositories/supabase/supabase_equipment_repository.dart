@@ -13,6 +13,7 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
   static Equipment _fromRow(Map<String, dynamic> row) {
     return Equipment(
       id: row['id'] as String,
+      code: (row['code'] as String?) ?? '',
       name: (row['name'] as String?) ?? '',
       category: (row['category'] as String?) ?? '',
       location: (row['location'] as String?) ?? '',

@@ -157,10 +157,30 @@ class StudentDashboardController extends ChangeNotifier {
   final List<ActivityEntry> _activity = List.of(StudentMockData.activity);
   List<ActivityEntry> get activity => List.unmodifiable(_activity);
 
-  /// 7-day daily activity numbers. Once borrowings are real, derive this
-  /// from `borrowings.filter(requested_at in last 7 days).length` grouped
-  /// by day. For now we keep the static seed.
-  final List<int> weeklyActivity = List.of(StudentMockData.weeklyActivity);
+  /// Borrowed-unit totals for the current Monday–Sunday week. The values are
+  /// derived from the same live borrowing stream that powers the dashboards,
+  /// so they update immediately when a student submits a request.
+  List<int> get weeklyActivity {
+    final today = DateTime.now();
+    final midnight = DateTime(today.year, today.month, today.day);
+    final weekStart = midnight.subtract(Duration(days: midnight.weekday - 1));
+    final totals = List<int>.filled(7, 0);
+    final all = [
+      ..._activeBorrowings,
+      ..._pendingBorrowings,
+      ..._overdueBorrowings,
+      ..._historyBorrowings,
+    ];
+    for (final borrowing in all) {
+      final requested = borrowing.requestedAt.toLocal();
+      final day = DateTime(requested.year, requested.month, requested.day);
+      final offset = day.difference(weekStart).inDays;
+      if (offset >= 0 && offset < totals.length) {
+        totals[offset] += borrowing.quantity;
+      }
+    }
+    return totals;
+  }
 
   List<ActivityEntry> get recentStudentActivity =>
       _activity.where((a) => a.scope == ActivityScope.student).take(3).toList();
@@ -367,11 +387,13 @@ class StudentDashboardController extends ChangeNotifier {
   /// id.
   Future<Borrowing> requestBorrowing(
     Equipment equipment, {
+    int quantity = 1,
     String? purpose,
   }) async {
     try {
       final created = await bundle.borrowings.create(
         equipmentId: equipment.id,
+        quantity: quantity,
         purpose: purpose,
       );
       _pendingBorrowings = [created, ..._pendingBorrowings];
@@ -379,7 +401,7 @@ class StudentDashboardController extends ChangeNotifier {
         scope: ActivityScope.student,
         icon: Icons.outbox_rounded,
         tone: PupColors.cyberAmber,
-        title: 'Requested: ${created.equipmentName}',
+        title: 'Requested: ${created.quantity}× ${created.equipmentName}',
         subtitle: purpose == null || purpose.isEmpty
             ? 'Awaiting admin approval'
             : '"$purpose" — awaiting admin approval',

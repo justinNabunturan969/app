@@ -17,7 +17,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   /// to PostgREST. `student` is an alias for the embedded `profiles` row;
   /// its `student_id` field is the school number, not the FK UUID.
   static const _selectWithJoins =
-      'id, equipment_id, student_id, status, purpose, requested_at, '
+      'id, equipment_id, student_id, status, purpose, quantity, requested_at, '
       'borrowed_at, due_at, returned_at, '
       'equipment:equipment!borrowings_equipment_id_fkey ( id, name ), '
       'student:profiles!borrowings_student_id_fkey ( id, student_id, full_name )';
@@ -71,6 +71,8 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       // The QR code on the prototype just round-trips the borrowing id; once
       // a real QR generator is wired up this would be the encoded payload.
       qrCode: row['id'] as String,
+      quantity: (row['quantity'] as int?) ?? 1,
+      requestedAt: requestedAt ?? borrowDate,
     );
   }
 
@@ -166,11 +168,16 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   @override
   Future<Borrowing> create({
     required String equipmentId,
+    required int quantity,
     String? purpose,
   }) async {
     final row = await _client.rpc(
       'request_borrowing',
-      params: {'p_equipment_id': equipmentId, 'p_purpose': purpose ?? ''},
+      params: {
+        'p_equipment_id': equipmentId,
+        'p_purpose': purpose ?? '',
+        'p_quantity': quantity,
+      },
     );
     return _loadRpcBorrowing(row);
   }

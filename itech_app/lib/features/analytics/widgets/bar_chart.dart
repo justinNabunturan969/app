@@ -41,6 +41,11 @@ class _MonthlyActivityBarChartState extends State<MonthlyActivityBarChart>
   /// which was causing a ~4px bottom overflow on the tallest bar.
   static const double _maxBarHeight = 78;
 
+  String _dayLabel(int index) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels[index.clamp(0, labels.length - 1)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -136,13 +141,11 @@ class _MonthlyActivityBarChartState extends State<MonthlyActivityBarChart>
                                   // is 0, then clamp(4.0, 78.0) gives 4.0.
                                   // Was previously producing a NaN height
                                   // when the entire data list was 0s.
-                                  height: (_maxBarHeight *
-                                          (widget.data[i] / safeMax) *
-                                          _anim.value)
-                                      .clamp(
-                                        4.0,
-                                        _maxBarHeight.toDouble(),
-                                      ),
+                                  height:
+                                      (_maxBarHeight *
+                                              (widget.data[i] / safeMax) *
+                                              _anim.value)
+                                          .clamp(4.0, _maxBarHeight.toDouble()),
                                   child: Stack(
                                     children: [
                                       Container(
@@ -182,7 +185,7 @@ class _MonthlyActivityBarChartState extends State<MonthlyActivityBarChart>
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'W${i + 1}',
+                                _dayLabel(i),
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,

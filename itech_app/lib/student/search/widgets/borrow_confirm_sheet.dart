@@ -45,6 +45,7 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
   final FocusNode _purposeFocus = FocusNode();
   bool _submitting = false;
   String? _error;
+  int _quantity = 1;
 
   @override
   void dispose() {
@@ -63,6 +64,7 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
       final ctrl = context.read<StudentDashboardController>();
       final created = await ctrl.requestBorrowing(
         widget.equipment,
+        quantity: _quantity,
         purpose: _purposeC.text.trim().isEmpty ? null : _purposeC.text.trim(),
       );
       if (!mounted) return;
@@ -114,9 +116,8 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
     // already has a matching active or pending row, surface that here
     // so the user never gets the raw Postgres error.
     final ctrl = context.watch<StudentDashboardController>();
-    final hasOpenRequest = ctrl.activeBorrowings.any(
-          (b) => b.equipmentId == e.id,
-        ) ||
+    final hasOpenRequest =
+        ctrl.activeBorrowings.any((b) => b.equipmentId == e.id) ||
         ctrl.pendingBorrowings.any((b) => b.equipmentId == e.id);
 
     final viewInsets = MediaQuery.of(context).viewInsets;
@@ -151,6 +152,13 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
                 _SheetHeader(equipment: e, tone: tone, isDark: isDark),
                 const SizedBox(height: 18),
                 _DetailRow(equipment: e),
+                const SizedBox(height: 14),
+                _QuantityPicker(
+                  quantity: _quantity,
+                  max: e.available,
+                  enabled: !_submitting && !hasOpenRequest,
+                  onChanged: (quantity) => setState(() => _quantity = quantity),
+                ),
                 const SizedBox(height: 14),
                 _PurposeField(
                   controller: _purposeC,
@@ -202,8 +210,9 @@ class _SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleColor =
-        isDark ? Theme.of(context).colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? Theme.of(context).colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -226,10 +235,7 @@ class _SheetHeader extends StatelessWidget {
               ],
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: tone.withValues(alpha: 0.5),
-              width: 1.2,
-            ),
+            border: Border.all(color: tone.withValues(alpha: 0.5), width: 1.2),
             boxShadow: [
               BoxShadow(
                 color: tone.withValues(alpha: isDark ? 0.35 : 0.20),
@@ -292,28 +298,29 @@ class _DetailRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.5),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
         ),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
           _DetailChip(
             icon: Icons.tag_rounded,
-            label: equipment.id,
+            label:
+                'ID: ${equipment.code.isEmpty ? equipment.id : equipment.code}',
           ),
-          const SizedBox(width: 8),
           _DetailChip(
             icon: Icons.place_rounded,
-            label: equipment.location,
-            flexible: true,
+            label: equipment.location.isEmpty
+                ? 'Room not specified'
+                : equipment.location,
           ),
-          const SizedBox(width: 8),
           _DetailChip(
             icon: Icons.event_available_rounded,
             label: '3 days',
@@ -326,24 +333,18 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _DetailChip extends StatelessWidget {
-  const _DetailChip({
-    required this.icon,
-    required this.label,
-    this.tooltip,
-    this.flexible = false,
-  });
+  const _DetailChip({required this.icon, required this.label, this.tooltip});
 
   final IconData icon;
   final String label;
   final String? tooltip;
-  final bool flexible;
 
   @override
   Widget build(BuildContext context) {
     final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -351,16 +352,12 @@ class _DetailChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: PupColors.ashGray),
           const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                color: PupColors.slateGray,
-              ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],
@@ -369,6 +366,115 @@ class _DetailChip extends StatelessWidget {
 
     if (tooltip == null) return content;
     return Tooltip(message: tooltip!, child: content);
+  }
+}
+
+class _QuantityPicker extends StatelessWidget {
+  const _QuantityPicker({
+    required this.quantity,
+    required this.max,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final int quantity;
+  final int max;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final canDecrease = enabled && quantity > 1;
+    final canIncrease = enabled && quantity < max;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.inventory_2_outlined, color: PupColors.techCyan),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Quantity to borrow',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: textColor,
+                  ),
+                ),
+                Text(
+                  '$max available',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: textColor.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _QuantityButton(
+            icon: Icons.remove_rounded,
+            enabled: canDecrease,
+            onTap: () => onChanged(quantity - 1),
+          ),
+          SizedBox(
+            width: 34,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                color: textColor,
+              ),
+            ),
+          ),
+          _QuantityButton(
+            icon: Icons.add_rounded,
+            enabled: canIncrease,
+            onTap: () => onChanged(quantity + 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuantityButton extends StatelessWidget {
+  const _QuantityButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: enabled ? onTap : null,
+      icon: Icon(icon),
+      color: PupColors.cyberAmber,
+      disabledColor: Theme.of(context).disabledColor,
+      style: IconButton.styleFrom(
+        backgroundColor: PupColors.cyberAmber.withValues(alpha: 0.12),
+        minimumSize: const Size(36, 36),
+        padding: EdgeInsets.zero,
+      ),
+    );
   }
 }
 
@@ -422,32 +528,29 @@ class _PurposeField extends StatelessWidget {
           maxLines: 3,
           maxLength: 200,
           textInputAction: TextInputAction.newline,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
-            color: PupColors.slateGray,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           decoration: InputDecoration(
             hintText: 'e.g. Electronics lab experiment, capstone prototype…',
-            hintStyle: const TextStyle(
+            hintStyle: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: PupColors.ashGray,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             filled: true,
-            fillColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.5),
+            fillColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: Theme.of(context).dividerColor,
-              ),
+              borderSide: BorderSide(color: Theme.of(context).dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -527,10 +630,7 @@ class _ActionRow extends StatelessWidget {
               ),
               child: const Text(
                 'Cancel',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13.5,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5),
               ),
             ),
           ),
@@ -543,10 +643,13 @@ class _ActionRow extends StatelessWidget {
             child: FilledButton(
               onPressed: onSubmit,
               style: FilledButton.styleFrom(
-                backgroundColor:
-                    _canSubmit ? PupColors.cyberAmber : PupColors.ashGray,
+                backgroundColor: _canSubmit
+                    ? PupColors.cyberAmber
+                    : PupColors.ashGray,
                 foregroundColor: const Color(0xFF1B1B1B),
-                disabledBackgroundColor: PupColors.ashGray.withValues(alpha: 0.4),
+                disabledBackgroundColor: PupColors.ashGray.withValues(
+                  alpha: 0.4,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -599,9 +702,7 @@ class _ErrorBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: PupColors.signalRed.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: PupColors.signalRed.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: PupColors.signalRed.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [

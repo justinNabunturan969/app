@@ -1,18 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show IconData, Color;
 
-enum BorrowingStatus {
-  pending,
-  active,
-  returned,
-  overdue,
-  rejected,
-  approved,
-}
+enum BorrowingStatus { pending, active, returned, overdue, rejected, approved }
 
 @immutable
 class Equipment {
   final String id;
+
+  /// Human-readable inventory code, separate from the database UUID [id].
+  final String code;
   final String name;
   final String category;
   final String location;
@@ -23,6 +19,7 @@ class Equipment {
 
   const Equipment({
     required this.id,
+    this.code = '',
     required this.name,
     required this.category,
     required this.location,
@@ -34,6 +31,7 @@ class Equipment {
 
   Equipment copyWith({
     String? id,
+    String? code,
     String? name,
     String? category,
     String? location,
@@ -44,6 +42,7 @@ class Equipment {
   }) {
     return Equipment(
       id: id ?? this.id,
+      code: code ?? this.code,
       name: name ?? this.name,
       category: category ?? this.category,
       location: location ?? this.location,
@@ -69,6 +68,12 @@ class Borrowing {
   final bool borrowedByYou;
   final String qrCode;
 
+  /// Number of units requested from this equipment stock record.
+  final int quantity;
+
+  /// Preserves when the student made the request, even after approval.
+  final DateTime requestedAt;
+
   const Borrowing({
     required this.id,
     required this.equipmentId,
@@ -81,7 +86,9 @@ class Borrowing {
     required this.status,
     this.borrowedByYou = true,
     required this.qrCode,
-  });
+    this.quantity = 1,
+    DateTime? requestedAt,
+  }) : requestedAt = requestedAt ?? borrowDate;
 
   Duration remaining() => returnDate.difference(DateTime.now());
 
@@ -97,6 +104,8 @@ class Borrowing {
     BorrowingStatus? status,
     bool? borrowedByYou,
     String? qrCode,
+    int? quantity,
+    DateTime? requestedAt,
   }) {
     return Borrowing(
       id: id ?? this.id,
@@ -110,6 +119,8 @@ class Borrowing {
       status: status ?? this.status,
       borrowedByYou: borrowedByYou ?? this.borrowedByYou,
       qrCode: qrCode ?? this.qrCode,
+      quantity: quantity ?? this.quantity,
+      requestedAt: requestedAt ?? this.requestedAt,
     );
   }
 }
@@ -170,8 +181,7 @@ class ActiveSession {
         .toUpperCase();
   }
 
-  Duration get sinceLastActivity =>
-      DateTime.now().difference(lastActivityAt);
+  Duration get sinceLastActivity => DateTime.now().difference(lastActivityAt);
 
   ActiveSession copyWith({
     String? id,

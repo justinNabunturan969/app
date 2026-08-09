@@ -30,6 +30,7 @@ abstract class BorrowingsRepository {
   /// re-fetching the whole list.
   Future<Borrowing> create({
     required String equipmentId,
+    required int quantity,
     String? purpose,
   });
 
@@ -45,10 +46,10 @@ abstract class BorrowingsRepository {
 /// behaviour to the previous in-controller implementation.
 class MockBorrowingsRepository implements BorrowingsRepository {
   MockBorrowingsRepository()
-      : _active = List.of(StudentMockData.activeBorrowings),
-        _overdue = List.of(StudentMockData.overdueBorrowings),
-        _pending = List.of(StudentMockData.pendingBorrowings),
-        _history = List.of(StudentMockData.historyBorrowings);
+    : _active = List.of(StudentMockData.activeBorrowings),
+      _overdue = List.of(StudentMockData.overdueBorrowings),
+      _pending = List.of(StudentMockData.pendingBorrowings),
+      _history = List.of(StudentMockData.historyBorrowings);
 
   final List<Borrowing> _active;
   final List<Borrowing> _overdue;
@@ -86,6 +87,7 @@ class MockBorrowingsRepository implements BorrowingsRepository {
   @override
   Future<Borrowing> create({
     required String equipmentId,
+    required int quantity,
     String? purpose,
   }) async {
     // The mock has no concept of "current student" — fall back to the
@@ -112,6 +114,7 @@ class MockBorrowingsRepository implements BorrowingsRepository {
       status: BorrowingStatus.pending,
       borrowedByYou: true,
       qrCode: 'B-${now.millisecondsSinceEpoch}',
+      quantity: quantity,
     );
 
     _pending.insert(0, newBorrowing);
