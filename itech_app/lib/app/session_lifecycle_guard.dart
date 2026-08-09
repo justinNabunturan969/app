@@ -3,6 +3,7 @@ import 'dart:js_interop';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/repositories/user_repository.dart';
 
@@ -43,6 +44,7 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   AppLifecycleListener? _listener;
   JSFunction? _webCleanupFn;
   Timer? _heartbeat;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
@@ -55,6 +57,24 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     // long enough for `expire_stale_sessions` to have swept a row
     // that was never re-created on a page refresh.
     unawaited(_markOnline());
+
+    // A cold app starts before Supabase restores its persisted session, so the
+    // first call above can legitimately find no signed-in user. Listen for
+    // the completed auth event and immediately create the presence row then;
+    // this also covers sign-ins from a second device without waiting for the
+    // next 30-second heartbeat.
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      switch (data.event) {
+        case AuthChangeEvent.initialSession:
+        case AuthChangeEvent.signedIn:
+        case AuthChangeEvent.tokenRefreshed:
+          if (data.session != null) unawaited(_markOnline());
+        default:
+          break;
+      }
+    });
 
     // `onPause` / `onHide` fire when the user switches tabs, loses
     // window focus, or backgrounds the app on mobile — all of which
@@ -89,6 +109,7 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   void dispose() {
     _listener?.dispose();
     _heartbeat?.cancel();
+    _authSubscription?.cancel();
     if (kIsWeb && _webCleanupFn != null) {
       _unregisterPageHide(_webCleanupFn!);
     }
