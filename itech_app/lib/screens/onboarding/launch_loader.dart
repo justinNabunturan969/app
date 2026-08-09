@@ -8,8 +8,8 @@ import '../../widgets/branding/launch_wrench_icon.dart';
 
 /// The app's universal entry animation.
 ///
-/// The wrench rises from below, settles in the center, glides left, and then
-/// reveals the app name with a typewriter effect before navigation.
+/// The wrench rises exactly through the visual center, glides to its final
+/// wordmark position, then reveals the app name with a typewriter effect.
 class LaunchLoader extends StatefulWidget {
   const LaunchLoader({super.key});
 
@@ -25,7 +25,6 @@ class _LaunchLoaderState extends State<LaunchLoader>
   static const _gap = 10.0;
 
   late final AnimationController _controller;
-  late final Animation<Alignment> _brandAlignment;
   late final Animation<double> _wrenchScale;
 
   @override
@@ -35,30 +34,6 @@ class _LaunchLoaderState extends State<LaunchLoader>
       vsync: this,
       duration: const Duration(milliseconds: 2600),
     );
-
-    // The row reserves room for the wordmark from the beginning. Starting
-    // slightly to the right keeps the wrench itself centered while it rises;
-    // moving the complete row to center then naturally places it left of text.
-    _brandAlignment = TweenSequence<Alignment>([
-      TweenSequenceItem(
-        tween: AlignmentTween(
-          begin: const Alignment(0.42, 2.15),
-          end: const Alignment(0.42, 0),
-        ).chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 40,
-      ),
-      TweenSequenceItem(
-        tween: AlignmentTween(
-          begin: const Alignment(0.42, 0),
-          end: Alignment.center,
-        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
-        weight: 24,
-      ),
-      TweenSequenceItem(
-        tween: ConstantTween<Alignment>(Alignment.center),
-        weight: 36,
-      ),
-    ]).animate(_controller);
     _wrenchScale = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(
@@ -89,6 +64,34 @@ class _LaunchLoaderState extends State<LaunchLoader>
     context.go(role == UserRole.admin ? '/admin/shell' : '/student/shell');
   }
 
+  /// Converts a horizontal pixel offset from screen center into an
+  /// [Alignment] coordinate for a child of [childWidth]. This keeps the
+  /// completed icon + wordmark lockup centered at every viewport width.
+  double _alignmentForOffset({
+    required double screenWidth,
+    required double childWidth,
+    required double offset,
+  }) {
+    final availableTravel = (screenWidth - childWidth) / 2;
+    if (availableTravel <= 0) return 0;
+    return (offset / availableTravel).clamp(-1.0, 1.0);
+  }
+
+  Alignment _wrenchAlignment({
+    required double progress,
+    required double finalX,
+  }) {
+    if (progress <= 0.40) {
+      final t = Curves.easeOutBack.transform(progress / 0.40);
+      return Alignment.lerp(const Alignment(0, 2.15), Alignment.center, t)!;
+    }
+    if (progress <= 0.64) {
+      final t = Curves.easeInOutCubic.transform((progress - 0.40) / 0.24);
+      return Alignment.lerp(Alignment.center, Alignment(finalX, 0), t)!;
+    }
+    return Alignment(finalX, 0);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -99,66 +102,90 @@ class _LaunchLoaderState extends State<LaunchLoader>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF08090B),
-      body: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final typingProgress = ((_controller.value - 0.64) / 0.27).clamp(
-            0.0,
-            1.0,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Final lockup width is wrench + gap + wordmark. Its center remains
+          // at screen center, placing the wrench and text at these offsets.
+          final wrenchFinalOffset = -(_gap + _wordmarkWidth) / 2;
+          final textFinalOffset = (_wrenchSize + _gap) / 2;
+          final wrenchFinalX = _alignmentForOffset(
+            screenWidth: constraints.maxWidth,
+            childWidth: _wrenchSize,
+            offset: wrenchFinalOffset,
           );
-          final typedLength = (_appName.length * typingProgress).floor();
-          final typedName = _appName.substring(0, typedLength);
-          final isTyping = typedLength < _appName.length;
+          final textFinalX = _alignmentForOffset(
+            screenWidth: constraints.maxWidth,
+            childWidth: _wordmarkWidth,
+            offset: textFinalOffset,
+          );
 
-          return Align(
-            alignment: _brandAlignment.value,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Transform.scale(
-                  scale: _wrenchScale.value,
-                  child: const DecoratedBox(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x4DFFB800),
-                          blurRadius: 28,
-                          spreadRadius: 3,
-                        ),
-                      ],
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final typingProgress = ((_controller.value - 0.64) / 0.27).clamp(
+                0.0,
+                1.0,
+              );
+              final typedLength = (_appName.length * typingProgress).floor();
+              final typedName = _appName.substring(0, typedLength);
+              final isTyping = typedLength < _appName.length;
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Align(
+                    alignment: _wrenchAlignment(
+                      progress: _controller.value,
+                      finalX: wrenchFinalX,
                     ),
-                    child: LaunchWrenchIcon(size: _wrenchSize),
-                  ),
-                ),
-                const SizedBox(width: _gap),
-                SizedBox(
-                  width: _wordmarkWidth,
-                  child: Opacity(
-                    opacity: typingProgress,
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(text: typedName),
-                          if (isTyping)
-                            const TextSpan(
-                              text: '|',
-                              style: TextStyle(color: PupColors.cyberAmber),
+                    child: Transform.scale(
+                      scale: _wrenchScale.value,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x4DFFB800),
+                              blurRadius: 28,
+                              spreadRadius: 3,
                             ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.15,
+                          ],
+                        ),
+                        child: LaunchWrenchIcon(size: _wrenchSize),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  Align(
+                    alignment: Alignment(textFinalX, 0),
+                    child: SizedBox(
+                      width: _wordmarkWidth,
+                      child: Opacity(
+                        opacity: typingProgress,
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: typedName),
+                              if (isTyping)
+                                const TextSpan(
+                                  text: '|',
+                                  style: TextStyle(color: PupColors.cyberAmber),
+                                ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 27,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.15,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
