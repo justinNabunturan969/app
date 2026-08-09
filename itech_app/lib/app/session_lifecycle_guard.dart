@@ -9,20 +9,22 @@ import '../data/repositories/user_repository.dart';
 /// Keeps the current user's `active_sessions` row in sync with the
 /// app's actual lifecycle.
 ///
-/// - **Native (iOS / Android / desktop):** `AppLifecycleListener` fires
-///   `onPause` when the app moves to the background, `onDetach` when
-///   it's about to be torn down, and `onHide` when it's no longer
-///   visible. Any of those means the user is no longer "live", so
-///   we drop the row. `onResume` / `onShow` re-register the row so
-///   the user comes back online when they return.
+/// The row is created on `initState` and refreshed every 30 seconds
+/// while the app is alive, so the admin's Live tab reflects the user
+/// in near real time. We do **not** drop the row on `onPause` /
+/// `onHide`: on the web those fire every time the student switches
+/// tabs or loses window focus, and on mobile every time the app is
+/// backgrounded — in both cases the user is still on the device and
+/// may be back in a second, so a missing row would be misleading.
+/// The server's `expire_stale_sessions` sweep (2-minute threshold,
+/// called from the admin's `getActiveSessions`) handles users who
+/// have actually left; heartbeats keep everyone else visible.
 ///
-/// - **Web:** `AppLifecycleState.hidden` covers tab switches, but
-///   the only reliable signal for "tab is being closed" is the
-///   browser's `pagehide` event. We register a JS listener via
-///   `dart:js_interop` that fires the same cleanup. Note: the
-///   browser will not wait for the async Supabase delete to
-///   complete, so this is best-effort — a stale row is acceptable
-///   because the user is no longer interacting with the app.
+/// The only places we proactively call `removeOwnSession` are
+/// `onDetach` (native engine teardown) and the browser's `pagehide`
+/// event (best-effort — the browser will not wait for the Supabase
+/// round-trip, so a stale row may briefly linger; the next admin
+/// query will sweep it).
 class SessionLifecycleGuard extends StatefulWidget {
   const SessionLifecycleGuard({
     super.key,
@@ -46,20 +48,29 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   void initState() {
     super.initState();
 
-    // Native lifecycle hooks. `onPause` / `onHide` mean the user
-    // can no longer see the app, so we drop the session row. We
-    // also handle `onDetach` for desktop platforms where the app
-    // can be torn down without going through `paused` first.
+    // Register the session row on first mount, before the first
+    // 30-second heartbeat. Without this, the row only appears after
+    // the first tick — long enough for the admin's Live tab to
+    // briefly show "0 online" right after the student signs in, and
+    // long enough for `expire_stale_sessions` to have swept a row
+    // that was never re-created on a page refresh.
+    unawaited(_markOnline());
+
+    // `onPause` / `onHide` fire when the user switches tabs, loses
+    // window focus, or backgrounds the app on mobile — all of which
+    // are *temporary* absences. The 30s heartbeat below keeps the
+    // row fresh; the server's `expire_stale_sessions` (2-minute
+    // threshold) cleans up rows whose owner is truly gone. We only
+    // drop the row on `onDetach` (native engine teardown), which is
+    // the actual "user has left" event.
     _listener = AppLifecycleListener(
-      onPause: _markOffline,
-      onHide: _markOffline,
       onDetach: _markOffline,
       onResume: _markOnline,
       onShow: _markOnline,
     );
-    // Browsers do not guarantee an async network request on close. Refresh
-    // the lease while the app is visible so the server can expire abandoned
-    // sessions shortly after a tab/app disappears.
+    // Browsers do not guarantee an async network request on close.
+    // Refresh the lease while the app is visible so the server can
+    // expire abandoned sessions shortly after a tab/app disappears.
     _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(_markOnline());
     });
@@ -67,7 +78,8 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     if (kIsWeb) {
       _webCleanupFn = _registerPageHide((_) {
         // Fire and forget — the page is unloading and we cannot
-        // block on the Supabase round-trip.
+        // block on the Supabase round-trip. The next admin query
+        // will sweep the row if the round-trip is dropped.
         unawaited(_markOffline());
       });
     }
