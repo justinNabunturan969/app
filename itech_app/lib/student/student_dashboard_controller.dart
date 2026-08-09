@@ -38,6 +38,7 @@ class StudentDashboardController extends ChangeNotifier {
     // subscription is still started inside `load()` to keep the
     // existing flow intact.
     _startBorrowingsSubscription();
+    _startActiveSessionsSubscription();
   }
 
   /// All CRUD goes through this bundle. The shell is responsible for
@@ -192,6 +193,8 @@ class StudentDashboardController extends ChangeNotifier {
   List<ActiveSession> _activeSessions = const [];
   List<ActiveSession> get activeSessions => List.unmodifiable(_activeSessions);
 
+  StreamSubscription<List<ActiveSession>>? _activeSessionsSubscription;
+
   int get occupancyCount => _activeSessions.length;
   int get activeOccupancyCount =>
       _activeSessions.where((s) => s.activity == SessionActivity.active).length;
@@ -330,6 +333,22 @@ class StudentDashboardController extends ChangeNotifier {
       },
       onError: (Object error, StackTrace stackTrace) {
         debugPrint('Borrowings realtime subscription failed: $error');
+      },
+    );
+  }
+
+  /// Keeps Admin > Live synchronized across devices. Supabase emits an
+  /// initial snapshot and every insert, heartbeat update, deletion, and
+  /// force-logout, so the page updates without a refresh or app restart.
+  void _startActiveSessionsSubscription() {
+    if (_activeSessionsSubscription != null) return;
+    _activeSessionsSubscription = bundle.user.watchActiveSessions().listen(
+      (sessions) {
+        _activeSessions = List.of(sessions);
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Active-session realtime subscription failed: $error');
       },
     );
   }
@@ -721,6 +740,7 @@ class StudentDashboardController extends ChangeNotifier {
     _searchDebounceTimer?.cancel();
     _notificationsSubscription?.cancel();
     _borrowingsSubscription?.cancel();
+    _activeSessionsSubscription?.cancel();
     super.dispose();
   }
 }

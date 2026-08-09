@@ -49,6 +49,12 @@ abstract class UserRepository {
   /// is_admin()`).
   Future<List<ActiveSession>> getActiveSessions();
 
+  /// Emits the active-session feed whenever another device signs in, sends a
+  /// heartbeat, signs out, or is force-logged-out. The initial emission is
+  /// also a complete snapshot, so the Live screen does not have to wait for
+  /// a manual refresh before it can show a newly logged-in student.
+  Stream<List<ActiveSession>> watchActiveSessions();
+
   /// Best-effort cleanup of the current user's session row. Called on
   /// sign-out (and on app pause / detach) so the Live tab reflects
   /// reality instead of accumulating every account that's ever signed
@@ -101,6 +107,11 @@ class MockUserRepository implements UserRepository {
     // screen treats this exactly like a real query — the difference
     // is only that the data is static and lives in the bundle.
     return List.unmodifiable(StudentMockData.activeSessions);
+  }
+
+  @override
+  Stream<List<ActiveSession>> watchActiveSessions() {
+    return Stream.value(List.unmodifiable(StudentMockData.activeSessions));
   }
 
   @override

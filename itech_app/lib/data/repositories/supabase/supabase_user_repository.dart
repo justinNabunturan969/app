@@ -81,6 +81,23 @@ class SupabaseUserRepository implements UserRepository {
       // Students are not allowed to run the admin-only sweep; their own
       // query below remains correctly RLS-scoped.
     }
+    return _readActiveSessions();
+  }
+
+  /// Subscribes to the underlying table, then reloads the joined view used by
+  /// the UI. `stream()` only returns columns of `active_sessions`; re-reading
+  /// on each change preserves the profile and equipment details shown by the
+  /// Live tab.
+  @override
+  Stream<List<ActiveSession>> watchActiveSessions() {
+    if (_client.auth.currentUser == null) return const Stream.empty();
+    return _client
+        .from('active_sessions')
+        .stream(primaryKey: ['profile_id'])
+        .asyncMap((_) => _readActiveSessions());
+  }
+
+  Future<List<ActiveSession>> _readActiveSessions() async {
     final rows = await _client
         .from('active_sessions')
         .select(
