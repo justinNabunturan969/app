@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import '../../../theme/design_tokens.dart';
 import '../../../app/language_controller.dart';
+import 'voice_search_permission.dart';
 
 class VoiceSearchOverlay extends StatefulWidget {
   const VoiceSearchOverlay({
@@ -32,14 +33,44 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
   String? _resolvedLocaleId;
   bool _closing = false;
 
+  /// Tracks the microphone-permission pre-flight separately from
+  /// `_available`, which is the recognizer's "I can listen" flag. On
+  /// web we want the user to tap "Allow microphone" first so the
+  /// browser shows its real prompt (the Web Speech API prompt is easy
+  /// to miss on a phone), and only then hand off to the recognizer.
+  MicrophonePermissionStatus? _permission;
+  bool _requestingPermission = false;
+
   @override
   void initState() {
     super.initState();
     _speech = st.SpeechToText();
-    _init();
+    _bootstrap();
   }
 
-  Future<void> _init() async {
+  /// Runs the full startup sequence:
+  ///   1. Ask the OS / browser for microphone permission via the
+  ///      cross-platform helper. The web path goes through
+  ///      `getUserMedia` (the JS bridge in `web/index.html`) because
+  ///      its permission prompt is much more visible on mobile than
+  ///      the Web Speech API's own prompt.
+  ///   2. If permission was granted, hand off to the recognizer to
+  ///      confirm the speech engine is actually available and start
+  ///      listening.
+  ///   3. Otherwise, leave the overlay in a "needs your tap" state
+  ///      with a clear next step ("Allow microphone" button).
+  Future<void> _bootstrap() async {
+    final status = await MicrophonePermission.request();
+    if (!mounted) return;
+    setState(() => _permission = status);
+    if (status != MicrophonePermissionStatus.granted) {
+      setState(() => _error = _messageForPermission(status));
+      return;
+    }
+    await _initRecognizer();
+  }
+
+  Future<void> _initRecognizer() async {
     final copy = AppCopy(widget.language);
     final available = await _speech.initialize(
       onStatus: (status) {
@@ -69,6 +100,30 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
       // surface its error if it truly is unavailable.
       _resolvedLocaleId = widget.language.speechLocaleId;
       _listen();
+    }
+  }
+
+  /// Triggered by the explicit "Allow microphone" button. The first
+  /// call from `initState` already passed through the helper; this
+  /// re-asks so the user gets a second chance to grant (or correct a
+  /// previous denial) without having to dig into browser settings.
+  Future<void> _askForPermission() async {
+    if (_requestingPermission) return;
+    setState(() {
+      _requestingPermission = true;
+      _error = null;
+    });
+    final status = await MicrophonePermission.request();
+    if (!mounted) return;
+    setState(() {
+      _permission = status;
+      _requestingPermission = false;
+      if (status != MicrophonePermissionStatus.granted) {
+        _error = _messageForPermission(status);
+      }
+    });
+    if (status == MicrophonePermissionStatus.granted) {
+      await _initRecognizer();
     }
   }
 
@@ -127,6 +182,27 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
     return message;
   }
 
+  /// Maps the cross-platform permission enum to a single, mobile-
+  /// friendly instruction. Each message tells the user the *next*
+  /// step instead of leaving them to figure it out.
+  String _messageForPermission(MicrophonePermissionStatus status) {
+    switch (status) {
+      case MicrophonePermissionStatus.granted:
+        return '';
+      case MicrophonePermissionStatus.denied:
+        // On mobile web the address-bar lock icon is the only way to
+        // undo a denial — calling `getUserMedia` again won't re-prompt
+        // until the user clears the block.
+        return 'Microphone access is blocked. Tap the lock icon beside the website address, allow Microphone, then tap Allow microphone again.';
+      case MicrophonePermissionStatus.insecure:
+        return 'This page is not served over HTTPS, so the browser blocks microphone access. Reopen the app using the secure link.';
+      case MicrophonePermissionStatus.noMicrophone:
+        return 'No microphone was found on this device. Use the search bar to type your query instead.';
+      case MicrophonePermissionStatus.unsupported:
+        return 'This device or browser does not support voice search. Use the search bar to type your query instead.';
+    }
+  }
+
   Future<void> _retryListening() async {
     await _speech.cancel();
     if (!mounted) return;
@@ -165,6 +241,14 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
   Widget build(BuildContext context) {
     final copy = AppCopy(widget.language);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Once the recognizer is listening, we show the live transcript UI.
+    // Before that — i.e. while we're waiting for permission, waiting for
+    // the recognizer to come up, or sitting on a non-recoverable error —
+    // we show a focused "needs your tap" gate so the user always knows
+    // exactly what to do next.
+    final waitingForTap =
+        !_listening &&
+        (_permission != MicrophonePermissionStatus.granted || !_available);
     return Container(
       decoration: BoxDecoration(
         color: isDark
@@ -208,7 +292,13 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                               ? copy.listening
                               : (_available
                                     ? copy.readyFor(widget.language.label)
-                                    : copy.microphoneUnavailable),
+                                    : (_permission == null
+                                          ? 'Preparing microphone…'
+                                          : (_permission ==
+                                                    MicrophonePermissionStatus
+                                                        .granted
+                                                ? copy.microphoneUnavailable
+                                                : 'Microphone access needed'))),
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -220,18 +310,28 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Animated waveform
-                  const _Waveform(),
-                  const SizedBox(height: 14),
-
-                  Text(
-                    _lastWords.isEmpty ? ' ' : '"$_lastWords"',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: isDark ? Colors.white : PupColors.slateGray,
-                      fontSize: 14,
+                  if (waitingForTap) ...[
+                    _PermissionGate(
+                      isDark: isDark,
+                      requesting: _requestingPermission,
+                      canAskAgain:
+                          _permission == null ||
+                          _permission == MicrophonePermissionStatus.denied,
+                      onAllow: _askForPermission,
                     ),
-                  ),
+                  ] else ...[
+                    // Animated waveform (only while the recognizer is live)
+                    const _Waveform(),
+                    const SizedBox(height: 14),
+                    Text(
+                      _lastWords.isEmpty ? ' ' : '"$_lastWords"',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? Colors.white : PupColors.slateGray,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -272,22 +372,56 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _lastWords.trim().isEmpty
-                              ? null
-                              : _submitAndClose,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: PupColors.cyberAmber,
-                            foregroundColor: const Color(0xFF1B1B1B),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                      // While we're waiting for the user to grant
+                      // permission, the primary action becomes
+                      // "Allow microphone" instead of "Search" — the
+                      // recognizer can't submit anything yet, and a
+                      // disabled "Search" button next to "Cancel"
+                      // looks broken.
+                      if (waitingForTap)
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _requestingPermission
+                                ? null
+                                : _askForPermission,
+                            icon: _requestingPermission
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF1B1B1B),
+                                    ),
+                                  )
+                                : const Icon(Icons.mic_rounded, size: 18),
+                            label: const Text('Allow microphone'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: PupColors.cyberAmber,
+                              foregroundColor: const Color(0xFF1B1B1B),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
-                          child: Text(copy.search),
+                        )
+                      else
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: _lastWords.trim().isEmpty
+                                ? null
+                                : _submitAndClose,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: PupColors.cyberAmber,
+                              foregroundColor: const Color(0xFF1B1B1B),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Text(copy.search),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -295,6 +429,93 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "We need your microphone" card. Shown in place of the waveform
+/// while we're still waiting on a permission decision. The big amber
+/// "Allow microphone" button is the same one the parent renders as
+/// the primary action — this card just gives the user a single,
+/// obvious place to tap that re-triggers the browser / OS prompt.
+class _PermissionGate extends StatelessWidget {
+  const _PermissionGate({
+    required this.isDark,
+    required this.requesting,
+    required this.canAskAgain,
+    required this.onAllow,
+  });
+
+  final bool isDark;
+  final bool requesting;
+  final bool canAskAgain;
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = isDark ? Colors.white : PupColors.slateGray;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: PupColors.cyberAmber.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PupColors.cyberAmber.withValues(alpha: 0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Voice search needs your microphone',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: textColor,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            canAskAgain
+                ? 'Tap “Allow microphone” so your browser can ask for permission. On a phone the prompt usually appears at the top of the screen.'
+                : 'Microphone access is currently blocked. Use the lock icon beside the website address, allow Microphone, then come back and tap “Allow microphone”.',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: textColor.withValues(alpha: 0.78),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: requesting ? null : onAllow,
+              icon: requesting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF1B1B1B),
+                      ),
+                    )
+                  : const Icon(Icons.mic_rounded, size: 18),
+              label: const Text('Allow microphone'),
+              style: FilledButton.styleFrom(
+                backgroundColor: PupColors.cyberAmber,
+                foregroundColor: const Color(0xFF1B1B1B),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

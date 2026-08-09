@@ -88,6 +88,60 @@
   <script src="flutter_bootstrap.js" async></script>
 
   <!--
+    Microphone permission helper for voice search.
+    The browser's `navigator.mediaDevices.getUserMedia({ audio: true })`
+    request is the most consistent way to surface a microphone
+    permission prompt on mobile web — iOS Safari and Chrome on Android
+    both render a full-screen, unmistakable dialog. The Web Speech API
+    (`webkitSpeechRecognition`) is what the `speech_to_text` plugin
+    actually uses, but its permission prompt is easy to miss on a
+    phone and there is no clean "how do I re-enable this" path.
+    Requesting via `getUserMedia` first, then handing off to
+    `speech_to_text`, gives us both a clear prompt and a recoverable
+    failure mode. Exposed on `window.__pupRequestMic` so the Dart side
+    can call it through `dart:js_interop`.
+  -->
+  <script>
+    (function () {
+      window.__pupRequestMic = function () {
+        return new Promise(function (resolve) {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            resolve({ granted: false, reason: 'unsupported' });
+            return;
+          }
+          // Some browsers (older iOS Safari over plain HTTP) won't even
+          // expose `mediaDevices`. A secure context is required for
+          // getUserMedia to actually prompt the user.
+          if (typeof window.isSecureContext === 'boolean' && !window.isSecureContext) {
+            resolve({ granted: false, reason: 'insecure' });
+            return;
+          }
+          navigator.mediaDevices
+            .getUserMedia({ audio: true })
+            .then(function (stream) {
+              // We only wanted permission — stop every track immediately
+              // so the browser's "mic is on" indicator goes away.
+              try {
+                stream.getTracks().forEach(function (track) { track.stop(); });
+              } catch (_) { /* best effort */ }
+              resolve({ granted: true });
+            })
+            .catch(function (error) {
+              var name = (error && error.name) || '';
+              if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+                resolve({ granted: false, reason: 'denied' });
+              } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+                resolve({ granted: false, reason: 'no_microphone' });
+              } else {
+                resolve({ granted: false, reason: 'error', name: name });
+              }
+            });
+        });
+      };
+    })();
+  </script>
+
+  <!--
     Once Flutter has rendered its first frame, fade out the splash.
     Using a MutationObserver on <flt-glass-pane> is the most reliable
     hook that works across all Flutter web versions.

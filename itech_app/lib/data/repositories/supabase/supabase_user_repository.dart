@@ -158,14 +158,25 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
-  /// Re-registers the current user's `active_sessions` row, refreshing
-  /// the `last_activity_at` timestamp. Called on app launch and on
-  /// resume so a user who briefly backgrounded the app reappears on
-  /// the admin's Live tab.
+  /// Re-registers the current user's `active_sessions` row.
+  ///
+  /// We call `start_active_session` (not `touch_active_session`) because
+  /// the function is now an upsert: on insert it sets both timestamps
+  /// and `activity = 'active'`; on conflict it only refreshes
+  /// `last_activity_at` and `activity`, leaving `logged_in_at` alone so
+  /// the admin's "Logged in Xm ago" display stays accurate. Critically,
+  /// the upsert means a missing row (e.g. cleaned up by
+  /// `expire_stale_sessions` after a long background) is re-created on
+  /// the very next heartbeat — without this, a returning student would
+  /// stay invisible on the Live tab until they signed out and back in.
+  ///
+  /// Called on app launch (in `SessionLifecycleGuard.initState`) and on
+  /// the 30-second heartbeat, so a user who briefly backgrounded the
+  /// app reappears on the admin's Live tab as soon as they come back.
   @override
   Future<void> markOwnSessionActive() async {
     try {
-      await _client.rpc('touch_active_session');
+      await _client.rpc('start_active_session');
     } catch (_) {
       // Best effort.
     }
