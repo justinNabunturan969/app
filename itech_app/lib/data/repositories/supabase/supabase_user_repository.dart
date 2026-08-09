@@ -72,6 +72,15 @@ class SupabaseUserRepository implements UserRepository {
   /// `ActiveSession` shape the UI already knows how to render.
   @override
   Future<List<ActiveSession>> getActiveSessions() async {
+    // The server records any abandoned session in the audit history before
+    // removing it. A short heartbeat window handles browsers that close
+    // before their final pagehide request can finish.
+    try {
+      await _client.rpc('expire_stale_sessions');
+    } catch (_) {
+      // Students are not allowed to run the admin-only sweep; their own
+      // query below remains correctly RLS-scoped.
+    }
     final rows = await _client
         .from('active_sessions')
         .select(
@@ -79,6 +88,10 @@ class SupabaseUserRepository implements UserRepository {
           'current_equipment_id, '
           'profiles:profile_id ( student_id, full_name, email, program ), '
           'equipment:current_equipment_id ( id, name, location )',
+        )
+        .gte(
+          'last_activity_at',
+          DateTime.now().subtract(const Duration(minutes: 2)).toIso8601String(),
         )
         .order('last_activity_at', ascending: false);
 
@@ -136,7 +149,10 @@ class SupabaseUserRepository implements UserRepository {
     final user = _client.auth.currentUser;
     if (user == null) return;
     try {
-      await _client.from('active_sessions').delete().eq('profile_id', user.id);
+      await _client.rpc(
+        'end_active_session',
+        params: {'p_profile_id': user.id, 'p_reason': 'closed'},
+      );
     } catch (_) {
       // Best effort.
     }
@@ -148,15 +164,8 @@ class SupabaseUserRepository implements UserRepository {
   /// the admin's Live tab.
   @override
   Future<void> markOwnSessionActive() async {
-    final user = _client.auth.currentUser;
-    if (user == null) return;
     try {
-      await _client.from('active_sessions').upsert({
-        'profile_id': user.id,
-        'logged_in_at': DateTime.now().toIso8601String(),
-        'last_activity_at': DateTime.now().toIso8601String(),
-        'activity': 'active',
-      });
+      await _client.rpc('touch_active_session');
     } catch (_) {
       // Best effort.
     }
@@ -170,10 +179,10 @@ class SupabaseUserRepository implements UserRepository {
   Future<void> removeSessionById(String profileId) async {
     if (profileId.isEmpty) return;
     try {
-      await _client
-          .from('active_sessions')
-          .delete()
-          .eq('profile_id', profileId);
+      await _client.rpc(
+        'end_active_session',
+        params: {'p_profile_id': profileId, 'p_reason': 'force_logout'},
+      );
     } catch (_) {
       // Best effort. The local cache has already been updated, so
       // the admin still sees the kick take effect on their own tab.

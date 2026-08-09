@@ -357,10 +357,10 @@ class AuthSessionStorage {
     try {
       final user = _supabase.auth.currentUser;
       if (user != null) {
-        await _supabase
-            .from('active_sessions')
-            .delete()
-            .eq('profile_id', user.id);
+        await _supabase.rpc(
+          'end_active_session',
+          params: {'p_profile_id': user.id, 'p_reason': 'signed_out'},
+        );
       }
     } catch (_) {
       // continue
@@ -412,12 +412,7 @@ class AuthSessionStorage {
     try {
       final user = response.user;
       if (user != null) {
-        await _supabase.from('active_sessions').upsert({
-          'profile_id': user.id,
-          'logged_in_at': DateTime.now().toIso8601String(),
-          'last_activity_at': DateTime.now().toIso8601String(),
-          'activity': 'active',
-        });
+        await _supabase.rpc('start_active_session');
       }
     } catch (_) {
       // Best-effort. The Live tab will just show a missing row for

@@ -40,6 +40,7 @@ class SessionLifecycleGuard extends StatefulWidget {
 class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   AppLifecycleListener? _listener;
   JSFunction? _webCleanupFn;
+  Timer? _heartbeat;
 
   @override
   void initState() {
@@ -56,6 +57,12 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
       onResume: _markOnline,
       onShow: _markOnline,
     );
+    // Browsers do not guarantee an async network request on close. Refresh
+    // the lease while the app is visible so the server can expire abandoned
+    // sessions shortly after a tab/app disappears.
+    _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(_markOnline());
+    });
 
     if (kIsWeb) {
       _webCleanupFn = _registerPageHide((_) {
@@ -69,6 +76,7 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   @override
   void dispose() {
     _listener?.dispose();
+    _heartbeat?.cancel();
     if (kIsWeb && _webCleanupFn != null) {
       _unregisterPageHide(_webCleanupFn!);
     }
