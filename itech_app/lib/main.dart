@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app/session_lifecycle_guard.dart';
 import 'app/theme_controller.dart';
 import 'app/language_controller.dart';
 import 'auth/session/auth_session_storage.dart';
@@ -67,13 +68,20 @@ Future<void> main() async {
   runApp(
     Provider<RepositoryBundle>.value(
       value: repositoryBundle,
-      child: RouterApp(
-        router: AppRouter(
-          authStorage: authSessionStorage,
-          initialLocation: initialLocation,
-        ).router,
-        themeController: themeController,
-        languageController: languageController,
+      child: SessionLifecycleGuard(
+        // Drops the current user's `active_sessions` row whenever
+        // the app is backgrounded, hidden, detached, or (on web)
+        // the tab is closed. Re-registers the row on resume/show
+        // so the admin's Live tab stays accurate.
+        userRepository: repositoryBundle.user,
+        child: RouterApp(
+          router: AppRouter(
+            authStorage: authSessionStorage,
+            initialLocation: initialLocation,
+          ).router,
+          themeController: themeController,
+          languageController: languageController,
+        ),
       ),
     ),
   );

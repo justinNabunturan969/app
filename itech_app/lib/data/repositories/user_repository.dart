@@ -50,9 +50,22 @@ abstract class UserRepository {
   Future<List<ActiveSession>> getActiveSessions();
 
   /// Best-effort cleanup of the current user's session row. Called on
-  /// sign-out so the Live tab reflects reality instead of accumulating
-  /// every account that's ever signed in.
+  /// sign-out (and on app pause / detach) so the Live tab reflects
+  /// reality instead of accumulating every account that's ever signed
+  /// in.
   Future<void> removeOwnSession();
+
+  /// Re-registers (or refreshes) the current user's `active_sessions`
+  /// row. Called on app launch and on `onResume` so a user who
+  /// backgrounded and reopened the app is visible on the admin's
+  /// Live tab again.
+  Future<void> markOwnSessionActive();
+
+  /// Admin: forcibly end another user's session. Deletes the row in
+  /// `active_sessions` for `profileId`. Students must not be able to
+  /// call this — the Supabase bundle relies on the RLS policy
+  /// `is_admin()` to gate it server-side.
+  Future<void> removeSessionById(String profileId);
 }
 
 /// Mock implementation — reads from `StudentMockData`.
@@ -93,5 +106,17 @@ class MockUserRepository implements UserRepository {
   @override
   Future<void> removeOwnSession() async {
     // No-op for the mock — there's no DB row to delete.
+  }
+
+  @override
+  Future<void> markOwnSessionActive() async {
+    // No-op for the mock — the seed list is static, so the
+    // `kickSession` flow on the admin screen is the only mutation.
+  }
+
+  @override
+  Future<void> removeSessionById(String profileId) async {
+    // No-op for the mock — the kick UI already removes the row from
+    // the local cache; there's no DB to keep in sync.
   }
 }

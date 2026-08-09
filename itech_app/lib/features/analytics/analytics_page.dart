@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../app/theme_menu_button.dart';
 import '../../theme/design_tokens.dart';
+import '../../student/student_dashboard_controller.dart';
 
 import 'data/mock_data.dart';
 import 'widgets/stat_card.dart';
@@ -53,6 +55,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   @override
   Widget build(BuildContext context) {
+    final weeklyActivity = context
+        .select<StudentDashboardController, List<int>>(
+          (controller) => controller.weeklyActivity,
+        );
     final maxItemCount = AnalyticsMockData.topItems
         .map((e) => e.count)
         .fold<int>(0, (a, b) => a > b ? a : b);
@@ -121,12 +127,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                       ),
                     ),
                     const SizedBox(height: 14),
-                    _stagger(
-                      1,
-                      MonthlyActivityBarChart(
-                        data: AnalyticsMockData.weeklyData,
-                      ),
-                    ),
+                    _stagger(1, MonthlyActivityBarChart(data: weeklyActivity)),
                     const SizedBox(height: 16),
                     _stagger(
                       2,
