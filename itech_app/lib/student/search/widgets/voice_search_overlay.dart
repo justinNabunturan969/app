@@ -246,10 +246,9 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
     // the recognizer to come up, or sitting on a non-recoverable error —
     // we show a focused "needs your tap" gate so the user always knows
     // exactly what to do next.
-    final waitingForTap = !_listening && (
-      _permission != MicrophonePermissionStatus.granted ||
-      !_available
-    );
+    final waitingForTap =
+        !_listening &&
+        (_permission != MicrophonePermissionStatus.granted || !_available);
     return Container(
       decoration: BoxDecoration(
         color: isDark
@@ -296,10 +295,10 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                                     : (_permission == null
                                           ? 'Preparing microphone…'
                                           : (_permission ==
-                                                      MicrophonePermissionStatus
-                                                          .granted
-                                                  ? copy.microphoneUnavailable
-                                                  : 'Microphone access needed'))),
+                                                    MicrophonePermissionStatus
+                                                        .granted
+                                                ? copy.microphoneUnavailable
+                                                : 'Microphone access needed'))),
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -315,7 +314,8 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                     _PermissionGate(
                       isDark: isDark,
                       requesting: _requestingPermission,
-                      canAskAgain: _permission == null ||
+                      canAskAgain:
+                          _permission == null ||
                           _permission == MicrophonePermissionStatus.denied,
                       onAllow: _askForPermission,
                     ),
@@ -398,8 +398,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                             style: FilledButton.styleFrom(
                               backgroundColor: PupColors.cyberAmber,
                               foregroundColor: const Color(0xFF1B1B1B),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
@@ -415,8 +414,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                             style: FilledButton.styleFrom(
                               backgroundColor: PupColors.cyberAmber,
                               foregroundColor: const Color(0xFF1B1B1B),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
@@ -463,9 +461,7 @@ class _PermissionGate extends StatelessWidget {
       decoration: BoxDecoration(
         color: PupColors.cyberAmber.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: PupColors.cyberAmber.withValues(alpha: 0.30),
-        ),
+        border: Border.all(color: PupColors.cyberAmber.withValues(alpha: 0.30)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
