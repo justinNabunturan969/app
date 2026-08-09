@@ -12,20 +12,29 @@ import '../data/repositories/user_repository.dart';
 ///
 /// The row is created on `initState` and refreshed every 30 seconds
 /// while the app is alive, so the admin's Live tab reflects the user
-/// in near real time. We do **not** drop the row on `onPause` /
-/// `onHide`: on the web those fire every time the student switches
-/// tabs or loses window focus, and on mobile every time the app is
-/// backgrounded — in both cases the user is still on the device and
-/// may be back in a second, so a missing row would be misleading.
-/// The server's `expire_stale_sessions` sweep (2-minute threshold,
-/// called from the admin's `getActiveSessions`) handles users who
-/// have actually left; heartbeats keep everyone else visible.
+/// in near real time. We **never** drop the row on `onPause`,
+/// `onHide`, `visibilitychange → hidden`, or `pagehide`: on the web
+/// every one of those fires whenever the student switches tabs, locks
+/// their phone, or lets the screen sleep — the user is still on the
+/// device and may be back in a second, so a missing row would be
+/// misleading. The server's `expire_stale_sessions` sweep (2-minute
+/// threshold, called from the admin's `getActiveSessions`) handles
+/// users who have actually left; the heartbeat keeps everyone else
+/// visible.
 ///
-/// The only places we proactively call `removeOwnSession` are
-/// `onDetach` (native engine teardown) and the browser's `pagehide`
-/// event (best-effort — the browser will not wait for the Supabase
-/// round-trip, so a stale row may briefly linger; the next admin
-/// query will sweep it).
+/// We do react to the *positive* half of those signals: when the page
+/// comes back to the foreground (`onResume`, `onShow`, or
+/// `visibilitychange → visible`), we re-mark the user online
+/// immediately so the row is restored within milliseconds instead of
+/// waiting for the next 30-second heartbeat tick.
+///
+/// The only place we proactively call `removeOwnSession` is
+/// `onDetach` (native engine teardown). On the web we deliberately
+/// do **not** hook `pagehide` — that event fires on bfcache
+/// transitions and mobile screen-off, which is far more often than
+/// a real tab close, and was deleting the row while the user was
+/// still on the device. The 2-minute server-side sweep covers the
+/// genuine "tab closed and forgotten" case.
 class SessionLifecycleGuard extends StatefulWidget {
   const SessionLifecycleGuard({
     super.key,
@@ -42,7 +51,7 @@ class SessionLifecycleGuard extends StatefulWidget {
 
 class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   AppLifecycleListener? _listener;
-  JSFunction? _webCleanupFn;
+  JSFunction? _webVisibilityFn;
   Timer? _heartbeat;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -78,11 +87,11 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
 
     // `onPause` / `onHide` fire when the user switches tabs, loses
     // window focus, or backgrounds the app on mobile — all of which
-    // are *temporary* absences. The 30s heartbeat below keeps the
-    // row fresh; the server's `expire_stale_sessions` (2-minute
-    // threshold) cleans up rows whose owner is truly gone. We only
-    // drop the row on `onDetach` (native engine teardown), which is
-    // the actual "user has left" event.
+    // are *temporary* absences. We deliberately do nothing on those
+    // signals (see class docstring): the 30s heartbeat below keeps
+    // the row fresh, the server's `expire_stale_sessions` cleans up
+    // users who are truly gone, and we re-mark the user online the
+    // moment they come back via `onResume` / `onShow`.
     _listener = AppLifecycleListener(
       onDetach: _markOffline,
       onResume: _markOnline,
@@ -96,11 +105,17 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     });
 
     if (kIsWeb) {
-      _webCleanupFn = _registerPageHide((_) {
-        // Fire and forget — the page is unloading and we cannot
-        // block on the Supabase round-trip. The next admin query
-        // will sweep the row if the round-trip is dropped.
-        unawaited(_markOffline());
+      // On the web there is no `onResume` for tab switches — the
+      // browser may have throttled or paused our Timer while the
+      // tab was hidden. Listen for `visibilitychange` and the
+      // moment the page is visible again, refresh the row so a
+      // returning student shows up on the admin's Live tab within
+      // milliseconds instead of waiting up to 30s for the next
+      // heartbeat tick. We do **not** drop the row on `hidden` —
+      // see the class docstring for why that was the bug.
+      _webVisibilityFn = _registerVisibilityChange((event) {
+        final state = _documentVisibilityState();
+        if (state == 'visible') unawaited(_markOnline());
       });
     }
   }
@@ -110,8 +125,8 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     _listener?.dispose();
     _heartbeat?.cancel();
     _authSubscription?.cancel();
-    if (kIsWeb && _webCleanupFn != null) {
-      _unregisterPageHide(_webCleanupFn!);
+    if (kIsWeb && _webVisibilityFn != null) {
+      _unregisterVisibilityChange(_webVisibilityFn!);
     }
     super.dispose();
   }
@@ -137,10 +152,10 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
 }
 
 // ── Web bridge ────────────────────────────────────────────────────────
-// dart:js_interop is available on every platform, but `window` and
-// `addEventListener` only exist on the web target. We guard the call
-// site with `kIsWeb` (above) and the externs themselves are wrapped in
-// a JS-accessible shape so the call is type-safe from Dart.
+// dart:js_interop is available on every platform, but `window`,
+// `document`, and `addEventListener` only exist on the web target.
+// We guard the call site with `kIsWeb` (above) and wrap the externs
+// in a JS-accessible shape so the calls are type-safe from Dart.
 
 @JS('window.addEventListener')
 external void _windowAddEventListener(JSAny type, JSAny listener);
@@ -148,12 +163,15 @@ external void _windowAddEventListener(JSAny type, JSAny listener);
 @JS('window.removeEventListener')
 external void _windowRemoveEventListener(JSAny type, JSAny listener);
 
-JSFunction _registerPageHide(void Function(JSObject event) handler) {
+@JS('document.visibilityState')
+external String? _documentVisibilityState();
+
+JSFunction _registerVisibilityChange(void Function(JSObject event) handler) {
   final fn = ((JSObject e) => handler(e)).toJS;
-  _windowAddEventListener('pagehide'.toJS, fn);
+  _windowAddEventListener('visibilitychange'.toJS, fn);
   return fn;
 }
 
-void _unregisterPageHide(JSFunction fn) {
-  _windowRemoveEventListener('pagehide'.toJS, fn);
+void _unregisterVisibilityChange(JSFunction fn) {
+  _windowRemoveEventListener('visibilitychange'.toJS, fn);
 }
