@@ -8,10 +8,8 @@ import '../../widgets/branding/launch_wrench_icon.dart';
 
 /// The app's universal entry animation.
 ///
-/// The wrench sits at center-bottom, pops into place, then shoots straight
-/// up off the top of the screen with an accelerating ("blast-off") curve.
-/// As it clears the top, the brand wordmark types itself in below the
-/// launch point and we route to the next destination.
+/// The wrench rises from below, settles in the center, glides left, and then
+/// reveals the app name with a typewriter effect before navigation.
 class LaunchLoader extends StatefulWidget {
   const LaunchLoader({super.key});
 
@@ -22,80 +20,61 @@ class LaunchLoader extends StatefulWidget {
 class _LaunchLoaderState extends State<LaunchLoader>
     with SingleTickerProviderStateMixin {
   static const _appName = 'ITech App';
-  static const _wrenchSize = 96.0;
+  static const _wrenchSize = 82.0;
+  static const _wordmarkWidth = 145.0;
+  static const _gap = 10.0;
 
   late final AnimationController _controller;
-  late final Animation<double> _wrenchOpacity;
+  late final Animation<Alignment> _brandAlignment;
   late final Animation<double> _wrenchScale;
-  late final Animation<Offset> _wrenchOffset;
-  late final Animation<double> _textOpacity;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 2600),
     );
 
-    // Wrench visibility: quick fade-in (0-8%), stay visible, fade out at the
-    // very end (90-100%) so it doesn't visibly clip the top edge — it
-    // dissolves into the dark background.
-    _wrenchOpacity = TweenSequence<double>([
+    // The row reserves room for the wordmark from the beginning. Starting
+    // slightly to the right keeps the wrench itself centered while it rises;
+    // moving the complete row to center then naturally places it left of text.
+    _brandAlignment = TweenSequence<Alignment>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 8,
+        tween: AlignmentTween(
+          begin: const Alignment(0.42, 2.15),
+          end: const Alignment(0.42, 0),
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 40,
       ),
-      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 82),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 10,
+        tween: AlignmentTween(
+          begin: const Alignment(0.42, 0),
+          end: Alignment.center,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 24,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<Alignment>(Alignment.center),
+        weight: 36,
       ),
     ]).animate(_controller);
-
-    // Wrench scale: a small "anticipation → release → fly" beat.
-    // 0.65 → 0.9 (compress), 0.9 → 1.06 (release with slight overshoot),
-    // 1.06 → 1.0 (settle) — gives it a launchpad feel before it blasts off.
     _wrenchScale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.65, end: 0.9)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 10,
+        tween: Tween<double>(
+          begin: 0.72,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 40,
       ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.9, end: 1.06)
-            .chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 8,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.06, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 82,
-      ),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 60),
     ]).animate(_controller);
-
-    // The actual upward shoot. The big range in Offset units (via
-    // FractionalTranslation) clears the top edge on any device height.
-    // easeInCubic — slow start, then accelerates — reads as "launched".
-    _wrenchOffset = Tween<Offset>(
-      begin: const Offset(0, 1.4),
-      end: const Offset(0, -3.8),
-    ).chain(CurveTween(curve: Curves.easeInCubic)).animate(_controller);
-
-    // Brand text fades in at the bottom once the wrench has cleared the
-    // top, then the typewriter within the text runs to completion.
-    _textOpacity = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.70, 0.92, curve: Curves.easeOut),
-    );
-
     _runAndAdvance();
   }
 
   Future<void> _runAndAdvance() async {
     await _controller.forward();
+    await Future<void>.delayed(const Duration(milliseconds: 240));
     if (!mounted) return;
 
     final loggedIn = await authSessionStorage.isLoggedIn();
@@ -123,67 +102,63 @@ class _LaunchLoaderState extends State<LaunchLoader>
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          // Typewriter for the brand text: starts at 0.72, finishes at 0.95.
-          final typingProgress =
-              ((_controller.value - 0.72) / 0.23).clamp(0.0, 1.0);
+          final typingProgress = ((_controller.value - 0.64) / 0.27).clamp(
+            0.0,
+            1.0,
+          );
           final typedLength = (_appName.length * typingProgress).floor();
           final typedName = _appName.substring(0, typedLength);
           final isTyping = typedLength < _appName.length;
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // Wrench: sits at center, then shoots upward.
-              Align(
-                alignment: Alignment.center,
-                child: FractionalTranslation(
-                  translation: _wrenchOffset.value,
-                  child: Opacity(
-                    opacity: _wrenchOpacity.value,
-                    child: Transform.scale(
-                      scale: _wrenchScale.value,
-                      child: const DecoratedBox(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x4DFFB800),
-                              blurRadius: 36,
-                              spreadRadius: 4,
-                            ),
-                          ],
+          return Align(
+            alignment: _brandAlignment.value,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.scale(
+                  scale: _wrenchScale.value,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x4DFFB800),
+                          blurRadius: 28,
+                          spreadRadius: 3,
                         ),
-                        child: LaunchWrenchIcon(size: _wrenchSize),
+                      ],
+                    ),
+                    child: LaunchWrenchIcon(size: _wrenchSize),
+                  ),
+                ),
+                const SizedBox(width: _gap),
+                SizedBox(
+                  width: _wordmarkWidth,
+                  child: Opacity(
+                    opacity: typingProgress,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: typedName),
+                          if (isTyping)
+                            const TextSpan(
+                              text: '|',
+                              style: TextStyle(color: PupColors.cyberAmber),
+                            ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 27,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.15,
                       ),
                     ),
                   ),
                 ),
-              ),
-              // Brand wordmark at the bottom — where the wrench launched from.
-              Align(
-                alignment: const Alignment(0, 0.86),
-                child: Opacity(
-                  opacity: _textOpacity.value,
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: typedName),
-                        if (isTyping)
-                          const TextSpan(
-                            text: '|',
-                            style: TextStyle(color: PupColors.cyberAmber),
-                          ),
-                      ],
-                    ),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
