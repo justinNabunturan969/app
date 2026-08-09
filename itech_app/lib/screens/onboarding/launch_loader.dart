@@ -8,8 +8,8 @@ import '../../widgets/branding/launch_wrench_icon.dart';
 
 /// The app's universal entry animation.
 ///
-/// The wrench rises from below the screen, settles in the center, glides left,
-/// and reveals the product name with a typewriter effect before navigation.
+/// The wrench rises from below, settles in the center, glides left, and then
+/// reveals the app name with a typewriter effect before navigation.
 class LaunchLoader extends StatefulWidget {
   const LaunchLoader({super.key});
 
@@ -20,10 +20,12 @@ class LaunchLoader extends StatefulWidget {
 class _LaunchLoaderState extends State<LaunchLoader>
     with SingleTickerProviderStateMixin {
   static const _appName = 'ITech App';
-  static const _wrenchSize = 86.0;
+  static const _wrenchSize = 82.0;
+  static const _wordmarkWidth = 145.0;
+  static const _gap = 10.0;
 
   late final AnimationController _controller;
-  late final Animation<Alignment> _wrenchAlignment;
+  late final Animation<Alignment> _brandAlignment;
   late final Animation<double> _wrenchScale;
 
   @override
@@ -33,23 +35,27 @@ class _LaunchLoaderState extends State<LaunchLoader>
       vsync: this,
       duration: const Duration(milliseconds: 2600),
     );
-    _wrenchAlignment = TweenSequence<Alignment>([
+
+    // The row reserves room for the wordmark from the beginning. Starting
+    // slightly to the right keeps the wrench itself centered while it rises;
+    // moving the complete row to center then naturally places it left of text.
+    _brandAlignment = TweenSequence<Alignment>([
       TweenSequenceItem(
         tween: AlignmentTween(
-          begin: const Alignment(0, 2.15),
-          end: Alignment.center,
+          begin: const Alignment(0.42, 2.15),
+          end: const Alignment(0.42, 0),
         ).chain(CurveTween(curve: Curves.easeOutBack)),
         weight: 40,
       ),
       TweenSequenceItem(
         tween: AlignmentTween(
-          begin: Alignment.center,
-          end: const Alignment(-0.42, 0),
+          begin: const Alignment(0.42, 0),
+          end: Alignment.center,
         ).chain(CurveTween(curve: Curves.easeInOutCubic)),
         weight: 24,
       ),
       TweenSequenceItem(
-        tween: ConstantTween<Alignment>(const Alignment(-0.42, 0)),
+        tween: ConstantTween<Alignment>(Alignment.center),
         weight: 36,
       ),
     ]).animate(_controller);
@@ -104,12 +110,12 @@ class _LaunchLoaderState extends State<LaunchLoader>
           final typedName = _appName.substring(0, typedLength);
           final isTyping = typedLength < _appName.length;
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Align(
-                alignment: _wrenchAlignment.value,
-                child: Transform.scale(
+          return Align(
+            alignment: _brandAlignment.value,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.scale(
                   scale: _wrenchScale.value,
                   child: const DecoratedBox(
                     decoration: BoxDecoration(
@@ -124,13 +130,11 @@ class _LaunchLoaderState extends State<LaunchLoader>
                     child: LaunchWrenchIcon(size: _wrenchSize),
                   ),
                 ),
-              ),
-              Align(
-                alignment: const Alignment(0.28, 0),
-                child: Opacity(
-                  opacity: typingProgress,
-                  child: SizedBox(
-                    width: 168,
+                const SizedBox(width: _gap),
+                SizedBox(
+                  width: _wordmarkWidth,
+                  child: Opacity(
+                    opacity: typingProgress,
                     child: Text.rich(
                       TextSpan(
                         children: [
@@ -146,15 +150,15 @@ class _LaunchLoaderState extends State<LaunchLoader>
                       overflow: TextOverflow.clip,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 30,
+                        fontSize: 27,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 0.25,
+                        letterSpacing: 0.15,
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
