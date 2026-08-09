@@ -64,6 +64,9 @@ fi
 if [ -n "${SUPABASE_ANON_KEY:-}" ]; then
   DART_DEFINES="$DART_DEFINES --dart-define=SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}"
 fi
+if [ -n "${PASSWORD_RESET_REDIRECT_URL:-}" ]; then
+  DART_DEFINES="$DART_DEFINES --dart-define=PASSWORD_RESET_REDIRECT_URL=${PASSWORD_RESET_REDIRECT_URL}"
+fi
 
 echo "==> Building web bundle (release)"
 # shellcheck disable=SC2086

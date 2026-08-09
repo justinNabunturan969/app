@@ -253,6 +253,93 @@ class AppNotification {
 /// belongs to and filter on the consumer side.
 enum ActivityScope { student, admin }
 
+/// One immutable record of a past login session. Drives the admin
+/// "Login History" view: every row in `session_history` is enriched with
+/// the user's credentials (joined from `profiles`) and a count of any
+/// borrowings that were created during the session window, so the admin
+/// can see *who* was on the app, *when*, and *what they did*.
+///
+/// `endReason` mirrors the `session_history.end_reason` CHECK column:
+///   - `signed_out`  — the user explicitly signed out.
+///   - `closed`      — the app was backgrounded / closed (lifecycle
+///                     `onDetach`).
+///   - `force_logout`— an admin terminated the session.
+///   - `expired`     — the server's `expire_stale_sessions` swept a
+///                     stale heartbeat.
+@immutable
+class LoginHistoryEntry {
+  const LoginHistoryEntry({
+    required this.id,
+    required this.profileId,
+    required this.studentId,
+    required this.fullName,
+    required this.email,
+    required this.program,
+    required this.yearLevel,
+    required this.section,
+    required this.role,
+    required this.loggedInAt,
+    required this.lastActivityAt,
+    required this.endedAt,
+    required this.endReason,
+    required this.borrowingsDuringSession,
+    required this.activityNames,
+  });
+
+  /// `session_history.id` — the immutable row id.
+  final String id;
+
+  /// `profiles.id` (the auth UUID). Useful for kicking or follow-up
+  /// actions keyed on the same id the rest of the app uses.
+  final String profileId;
+
+  // ── Credentials pulled from the joined `profiles` row ────────────────
+  final String studentId;
+  final String fullName;
+  final String email;
+  final String program;
+  final String yearLevel;
+  final String section;
+
+  /// `'student'` or `'admin'`. Lets the admin Login History view render
+  /// a "Faculty" badge next to admin sessions.
+  final String role;
+
+  // ── Session timestamps ───────────────────────────────────────────────
+  final DateTime loggedInAt;
+  final DateTime lastActivityAt;
+  final DateTime endedAt;
+
+  /// Mirrors `session_history.end_reason`.
+  final String endReason;
+
+  /// Number of borrowings the user created during this session window.
+  /// Computed on read by joining `borrowings.requested_at` against the
+  /// `(loggedInAt, endedAt)` range.
+  final int borrowingsDuringSession;
+
+  /// Equipment names the user interacted with during this session.
+  /// Capped at 5 in the repository so a heavy session doesn't blow up
+  /// the card's layout — the rest of the count is still reflected in
+  /// [borrowingsDuringSession].
+  final List<String> activityNames;
+
+  /// Wall-clock duration the session was alive. Always positive; the
+  /// `(loggedInAt, endedAt)` pair on the table is enforced non-null.
+  Duration get duration => endedAt.difference(loggedInAt);
+
+  /// Two-letter initials for the avatar. Falls back to a generic "?" so
+  /// a malformed row (e.g. a profile deleted mid-session) doesn't crash
+  /// the card.
+  String get initials {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+}
+
 /// A single entry in the local "activity" log. The log itself isn't
 /// persisted to Supabase yet — the controller appends one of these
 /// every time it performs a CRUD op (return, approve, reject, ...) so

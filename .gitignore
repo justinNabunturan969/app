@@ -1,0 +1,4 @@
+.vercel
+.env*
+itech_app.zip
+*.zip

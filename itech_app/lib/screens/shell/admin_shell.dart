@@ -9,15 +9,15 @@ import '../../theme/design_tokens.dart';
 import '../../widgets/responsive_scaffold.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../admin/admin_inventory_screen.dart';
-import '../admin/admin_occupancy_screen.dart';
+import '../admin/admin_login_history_screen.dart';
 import '../admin/admin_pending_requests_screen.dart';
 import '../admin/admin_scan_screen.dart';
 import '../student/student_notifications_screen.dart';
 
-/// Admin shell — hosts the 5 admin tabs (Dashboard, Inventory, Pending,
-/// Scan, Live). On mobile it renders a glass bottom-nav; on desktop /
-/// Chrome it renders a side NavigationRail. Each tab provides its own
-/// header, so the shell intentionally has no AppBar.
+/// Admin shell — hosts the 5 admin tabs (Dashboard, Login History,
+/// Inventory, Pending, Scan). On mobile it renders a glass bottom-nav;
+/// on desktop / Chrome it renders a side NavigationRail. Each tab
+/// provides its own header, so the shell intentionally has no AppBar.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
@@ -35,9 +35,9 @@ class _AdminShellState extends State<AdminShell> {
       selectedIcon: Icons.dashboard_rounded,
     ),
     ShellTab(
-      label: copy.live,
-      icon: Icons.podcasts_rounded,
-      selectedIcon: Icons.podcasts_rounded,
+      label: 'History',
+      icon: Icons.history_edu_outlined,
+      selectedIcon: Icons.history_edu_rounded,
     ),
     ShellTab(
       label: copy.inventory,
@@ -114,7 +114,7 @@ class _AdminShellState extends State<AdminShell> {
 
     switch (i) {
       case 1:
-        return AdminOccupancyScreen(onSwitchTab: switchTo);
+        return AdminLoginHistoryScreen(onSwitchTab: switchTo);
       case 2:
         return const AdminInventoryScreen();
       case 3:

@@ -416,4 +416,147 @@ class StudentMockData {
       scope: ActivityScope.student,
     ),
   ];
+
+  /// Mock seed for the admin "Login History" view. Every entry mirrors a
+  /// row in `session_history` enriched with credentials (joined from
+  /// `profiles`) and a count + names of borrowings that happened during
+  /// the session window. Mix of students, an admin, and end reasons so
+  /// the screen looks real out of the box.
+  static final List<LoginHistoryEntry> loginHistory = [
+    LoginHistoryEntry(
+      id: 'H-001',
+      profileId: 'auth-juan-1',
+      studentId: '2024-08721-MN-0',
+      fullName: 'Juan Dela Cruz',
+      email: 'juan.delacruz@iskolarngbayan.pup.edu.ph',
+      program: 'BS Electronics Engineering',
+      yearLevel: '3rd Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(hours: 1, minutes: 12)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(minutes: 38)),
+      endedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+      endReason: 'signed_out',
+      borrowingsDuringSession: 2,
+      activityNames: const [
+        'Fluke 87V Multimeter',
+        'Wrench Set 12pc',
+      ],
+    ),
+    LoginHistoryEntry(
+      id: 'H-002',
+      profileId: 'auth-maria-1',
+      studentId: '2023-01234-MN-0',
+      fullName: 'Maria Santos',
+      email: 'maria.santos@iskolarngbayan.pup.edu.ph',
+      program: 'BS Electronics Engineering',
+      yearLevel: '4th Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 5)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(hours: 1, minutes: 38)),
+      endedAt: DateTime.now().subtract(const Duration(hours: 1, minutes: 33)),
+      endReason: 'closed',
+      borrowingsDuringSession: 1,
+      activityNames: const ['Oscilloscope Kit (DSO)'],
+    ),
+    LoginHistoryEntry(
+      id: 'H-003',
+      profileId: 'auth-pedro-1',
+      studentId: '2023-05678-MN-0',
+      fullName: 'Pedro Garcia',
+      email: 'pedro.garcia@iskolarngbayan.pup.edu.ph',
+      program: 'BS Computer Engineering',
+      yearLevel: '4th Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(hours: 3, minutes: 42)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(hours: 3, minutes: 22)),
+      endedAt: DateTime.now().subtract(const Duration(hours: 3, minutes: 20)),
+      endReason: 'force_logout',
+      borrowingsDuringSession: 0,
+      activityNames: const [],
+    ),
+    LoginHistoryEntry(
+      id: 'H-004',
+      profileId: 'auth-ana-1',
+      studentId: '2024-09012-MN-0',
+      fullName: 'Ana Reyes',
+      email: 'ana.reyes@iskolarngbayan.pup.edu.ph',
+      program: 'BS Electronics Engineering',
+      yearLevel: '3rd Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(hours: 5, minutes: 10)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(hours: 4, minutes: 50)),
+      endedAt: DateTime.now().subtract(const Duration(hours: 4, minutes: 48)),
+      endReason: 'expired',
+      borrowingsDuringSession: 1,
+      activityNames: const ['LCR Meter'],
+    ),
+    LoginHistoryEntry(
+      id: 'H-005',
+      profileId: 'auth-admin-1',
+      studentId: 'FAC-001',
+      fullName: 'Engr. Roberto Cruz',
+      email: 'roberto.cruz@pup.edu.ph',
+      program: 'Faculty — Electronics Engineering',
+      yearLevel: '—',
+      section: '—',
+      role: 'admin',
+      loggedInAt: DateTime.now().subtract(const Duration(hours: 6, minutes: 30)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(hours: 6, minutes: 5)),
+      endedAt: DateTime.now().subtract(const Duration(hours: 6, minutes: 2)),
+      endReason: 'signed_out',
+      borrowingsDuringSession: 0,
+      activityNames: const [],
+    ),
+    LoginHistoryEntry(
+      id: 'H-006',
+      profileId: 'auth-carlos-1',
+      studentId: '2022-07777-MN-0',
+      fullName: 'Carlos Mendoza',
+      email: 'carlos.mendoza@iskolarngbayan.pup.edu.ph',
+      program: 'BS Mechanical Engineering',
+      yearLevel: '5th Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(days: 1, hours: 1, minutes: 38)),
+      endedAt:
+          DateTime.now().subtract(const Duration(days: 1, hours: 1, minutes: 30)),
+      endReason: 'signed_out',
+      borrowingsDuringSession: 3,
+      activityNames: const [
+        'Wrench Set 12pc',
+        'Screwdriver Kit',
+        'Digital Caliper (150mm)',
+      ],
+    ),
+    LoginHistoryEntry(
+      id: 'H-007',
+      profileId: 'auth-liza-1',
+      studentId: '2024-00123-MN-0',
+      fullName: 'Liza Aquino',
+      email: 'liza.aquino@iskolarngbayan.pup.edu.ph',
+      program: 'BS Computer Engineering',
+      yearLevel: '3rd Year',
+      section: 'MN-0',
+      role: 'student',
+      loggedInAt: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
+      lastActivityAt:
+          DateTime.now().subtract(const Duration(days: 1, hours: 3, minutes: 50)),
+      endedAt:
+          DateTime.now().subtract(const Duration(days: 1, hours: 3, minutes: 47)),
+      endReason: 'closed',
+      borrowingsDuringSession: 1,
+      activityNames: const ['Arduino UNO R3'],
+    ),
+  ];
 }

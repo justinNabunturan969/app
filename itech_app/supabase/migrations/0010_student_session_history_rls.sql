@@ -1,0 +1,15 @@
+-- No-op: previous version of this migration added a `session_history_self_read`
+-- policy so a student's home screen could show their own login history. The
+-- product direction changed — the login history now lives on the **admin**
+-- account, and the student account must not surface audit logs of any kind.
+-- The admin's existing `session_history_admin_read` policy (added in
+-- 0006_live_session_lifecycle.sql) already covers the read access needed by
+-- the new admin Login History view, so nothing else has to be granted here.
+--
+-- Keeping this file as a tombstone so the migration set still has the slot
+-- reserved (and the dropped policy stays explicit in git history if anyone
+-- looks). If you have a clone that ran the previous version, the policy
+-- would have been named `session_history_self_read` and is harmless — drop
+-- it manually if you prefer, but the rebuild path that ships with this
+-- commit never created it.
+select 'no-op: student self-read policy intentionally not created' as note;

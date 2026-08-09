@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Supabase project credentials. These come from your project's dashboard at
 /// https://supabase.com/dashboard/project/_/settings/api
 ///
@@ -29,8 +31,7 @@ class SupabaseConfig {
   // These match the project in `supabase.json`. The anon key is a public
   // key (its role is "anon"), so it's safe to ship in client code — RLS
   // policies on the database are what keep your data protected.
-  static const String _defaultUrl =
-      'https://obwdgxcfxxixnuqsjfpu.supabase.co';
+  static const String _defaultUrl = 'https://obwdgxcfxxixnuqsjfpu.supabase.co';
   static const String _defaultAnonKey =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
       'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9id2RneGNmeHhpeG51cXNqZnB1Iiwi'
@@ -46,6 +47,19 @@ class SupabaseConfig {
     'SUPABASE_ANON_KEY',
     defaultValue: _defaultAnonKey,
   );
+
+  /// Where Supabase returns the user after they open a password-reset email.
+  ///
+  /// For web builds the current origin is used automatically, which makes
+  /// preview and production Vercel deployments work without hard-coding a
+  /// domain. Native builds use the app's registered deep link. A deployment
+  /// may override either with `--dart-define=PASSWORD_RESET_REDIRECT_URL=...`.
+  static String get passwordResetRedirectUrl {
+    const configured = String.fromEnvironment('PASSWORD_RESET_REDIRECT_URL');
+    if (configured.isNotEmpty) return configured;
+    if (kIsWeb) return Uri.base.resolve('/reset-password').toString();
+    return 'pupitech://auth/reset-password';
+  }
 
   /// True if both URL and anon key resolved to a non-empty value. With
   /// the inlined defaults this is always true for production builds, but

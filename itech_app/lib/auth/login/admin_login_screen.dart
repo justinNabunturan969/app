@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import '../../env/supabase_config.dart';
 import '../../theme/design_tokens.dart';
 import '../validators/auth_validators.dart';
 import '../widgets/form_text_field.dart';
@@ -269,7 +270,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               try {
                 await Supabase.instance.client.auth.resetPasswordForEmail(
                   controller.text.trim().toLowerCase(),
-                  redirectTo: 'pupitech://reset-callback',
+                  redirectTo: SupabaseConfig.passwordResetRedirectUrl,
                 );
                 if (!dialogContext.mounted) return;
                 Navigator.pop(dialogContext);

@@ -27,6 +27,12 @@ void main() {
   test('accepts PUP email student logins without rewriting the email', () {
     expect(AuthValidators.validateStudentLogin('student1@pup.edu.ph'), isNull);
     expect(
+      AuthValidators.validateStudentLogin(
+        'student1@iskolarngbayan.pup.edu.ph',
+      ),
+      isNull,
+    );
+    expect(
       AuthSessionStorage.studentAuthEmailFor('student1@pup.edu.ph'),
       'student1@pup.edu.ph',
     );

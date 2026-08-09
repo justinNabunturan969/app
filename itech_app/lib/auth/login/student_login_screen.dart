@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import '../../env/supabase_config.dart';
 import '../../theme/design_tokens.dart';
 import '../session/auth_session_storage.dart';
 import '../validators/auth_validators.dart';
@@ -171,14 +172,14 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
               try {
                 await Supabase.instance.client.auth.resetPasswordForEmail(
                   email,
-                  redirectTo: 'pupitech://reset-callback',
+                  redirectTo: SupabaseConfig.passwordResetRedirectUrl,
                 );
                 if (!ctx.mounted) return;
                 Navigator.of(ctx).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                      'If that student ID exists, a reset link was sent.',
+                      'If that account exists, a reset link was sent.',
                     ),
                   ),
                 );

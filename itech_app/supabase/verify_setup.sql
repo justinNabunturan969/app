@@ -65,15 +65,30 @@ select
   from pg_trigger
  where tgname = 'on_borrowing_status_change';
 
--- (9) The student_id -> PUP webmail lookup RPC is installed? Without
---     it, students who signed up via the in-app "Create Account" form
---     (using their PUP webmail as the auth identity) can only log in
---     with that webmail — typing their student ID would 404.
+-- (9) The production hardening migration has removed the old public
+-- student-ID-to-email lookup and applied the explicit Data API grants needed
+-- by newer Supabase projects.
 select
-  'auth_email_for_student_id' as rpc_name,
-  count(*) as installed
-  from pg_proc
- where proname = 'auth_email_for_student_id';
+  'auth_email_for_student_id public execute grants' as check,
+  count(*) as grants_to_remove
+  from information_schema.routine_privileges
+ where routine_schema = 'public'
+   and routine_name = 'auth_email_for_student_id'
+   and grantee in ('PUBLIC', 'anon', 'authenticated')
+   and privilege_type = 'EXECUTE';
+
+select
+  table_name,
+  privilege_type,
+  grantee
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee = 'authenticated'
+  and table_name in (
+    'profiles', 'equipment', 'borrowings', 'active_sessions',
+    'notifications', 'borrowing_audit_log', 'session_history'
+  )
+order by table_name, privilege_type;
 
 -- (10) Security hardening functions/triggers installed?
 select proname as security_function

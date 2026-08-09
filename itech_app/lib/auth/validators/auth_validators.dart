@@ -25,8 +25,11 @@ class AuthValidators {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return 'PUP email is required.';
 
-    final re = RegExp(r'^[^\s@]+@pup\.edu\.ph$');
-    if (!re.hasMatch(v)) return 'Email must end with @pup.edu.ph.';
+    // PUP-issued addresses can use a subdomain, for example
+    // `name@iskolarngbayan.pup.edu.ph`. The former exact-domain pattern
+    // rejected the address shown in the sign-up UI itself.
+    final re = RegExp(r'^[^\s@]+@(?:[A-Za-z0-9-]+\.)*pup\.edu\.ph$');
+    if (!re.hasMatch(v)) return 'Email must use a pup.edu.ph address.';
     return null;
   }
 

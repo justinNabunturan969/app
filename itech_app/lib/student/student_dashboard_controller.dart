@@ -14,6 +14,7 @@ import 'models.dart'
         Borrowing,
         BorrowingStatus,
         Equipment,
+        LoginHistoryEntry,
         SessionActivity;
 
 // Note: StudentMockData is still imported for the activity-feed seed
@@ -246,10 +247,21 @@ class StudentDashboardController extends ChangeNotifier {
   }
 
   // ── Self presence (student's own row in active_sessions) ────────────
-  // The student shell gets to *see* and *control* its own row, so the
-  // home screen can render a "You're online" indicator and the student
-  // can explicitly check in / out instead of relying on the background
-  // heartbeat surviving browser tab throttling on mobile.
+  // The student no longer manually toggles their presence from the home
+  // screen — that "Go online / You're online" card has been removed.
+  // The `SessionLifecycleGuard` mounted in `main.dart` still keeps the
+  // `active_sessions` row warm in the background (heartbeat + auto-mark
+  // on resume), so the admin's *historical* view keeps getting accurate
+  // `session_history` rows whenever the student signs out, the app is
+  // detached, or the server's expire sweep catches a stale heartbeat.
+  // What is gone is the *manual* control surface — no goOnline, no
+  // goOffline, no toggle, no presence error to surface.
+  //
+  // We still expose the read-only `selfSession` / `isSelfOnline` getters
+  // because other code (e.g. the admin's login history view, future
+  // "currently signed in" indicators) wants to know whether the current
+  // user has a live `active_sessions` row without owning the manual
+  // toggle UI.
 
   /// The auth id of the currently signed-in user. The `active_sessions`
   /// table is keyed on this UUID (`profile_id`), not on
@@ -259,8 +271,8 @@ class StudentDashboardController extends ChangeNotifier {
   String? get _selfAuthId => bundle.user.currentAuthId;
 
   /// The student's own `ActiveSession`, or null when the row doesn't
-  /// exist. Drives the "You're online" / "Tap to go online" card on
-  /// the student home.
+  /// exist. Read-only — used by the admin shell's login history view
+  /// and other read-side features.
   ActiveSession? get selfSession {
     final me = _selfAuthId;
     if (me == null) return null;
@@ -270,102 +282,47 @@ class StudentDashboardController extends ChangeNotifier {
     return null;
   }
 
-  /// True when the student has a row in `active_sessions` — i.e. is
-  /// visible to the admin's Live tab.
+  /// True when the student has a row in `active_sessions`.
   bool get isSelfOnline => selfSession != null;
 
-  /// True while a `goOnline` / `goOffline` round-trip is in flight,
-  /// so the toggle on the home screen can show a spinner and ignore
-  /// double-taps.
-  bool _isOnlineToggling = false;
-  bool get isOnlineToggleInProgress => _isOnlineToggling;
+  // ── Admin login history (session_history + profile + activity) ─────
+  // Populated on demand by [loadLoginHistory] — typically once on the
+  // admin shell's first mount and again on pull-to-refresh. Backing
+  // table is `session_history` (RLS: admin only); see migration 0006
+  // and the repository's `getLoginHistory` for the join + activity
+  // correlation.
 
-  /// Last error from `goOnline` / `goOffline`. Surfaced in the UI as a
-  /// SnackBar — without this the toggle looks like a silent no-op when
-  /// the underlying RPC fails (e.g. RLS reject, network down,
-  /// `auth.uid()` is null because the session is half-hydrated).
-  String? _presenceError;
-  String? get presenceError => _presenceError;
+  List<LoginHistoryEntry> _loginHistory = const [];
+  List<LoginHistoryEntry> get loginHistory => List.unmodifiable(_loginHistory);
 
-  /// Clears `presenceError`. The home screen calls this after showing
-  /// the SnackBar so the same error doesn't re-appear on the next
-  /// rebuild.
-  void clearPresenceError() {
-    if (_presenceError == null) return;
-    _presenceError = null;
+  bool _loginHistoryLoading = false;
+  bool get loginHistoryLoading => _loginHistoryLoading;
+
+  /// Most recent error from [loadLoginHistory]. Surfaced in the admin
+  /// view as a soft banner — clearing it lets the next refresh decide
+  /// whether to re-show the message.
+  String? _loginHistoryError;
+  String? get loginHistoryError => _loginHistoryError;
+  void clearLoginHistoryError() {
+    if (_loginHistoryError == null) return;
+    _loginHistoryError = null;
     notifyListeners();
   }
 
-  /// Explicitly create (or refresh) the student's own row in
-  /// `active_sessions`. Idempotent — calling it while already online
-  /// is a no-op for the local state but still pings the server so
-  /// `last_activity_at` is fresh.
-  Future<bool> goOnline() async {
-    if (_isOnlineToggling) return false;
-    _isOnlineToggling = true;
-    _presenceError = null;
+  /// Pull every past session the current admin is allowed to see.
+  /// `limit` is forwarded to the repository (defaults to 100) so the
+  /// admin view can paginate if it ever needs to.
+  Future<void> loadLoginHistory({int limit = 100}) async {
+    _loginHistoryLoading = true;
+    _loginHistoryError = null;
     notifyListeners();
     try {
-      await bundle.user.markOwnSessionActive();
-      // Re-fetch the list so the new row is in `_activeSessions` and
-      // `selfSession` / `isSelfOnline` reflect the truth without
-      // waiting for the realtime subscription to round-trip.
-      try {
-        _activeSessions = await bundle.user.getActiveSessions();
-      } catch (_) {
-        // The realtime subscription will fill this in momentarily;
-        // don't surface the error to the UI.
-      }
-      _log(
-        scope: ActivityScope.student,
-        icon: Icons.wifi_tethering_rounded,
-        tone: PupColors.mintGreen,
-        title: 'You\'re online',
-        subtitle: 'Admin can see you on the Live tab.',
-      );
-      return true;
+      _loginHistory = await bundle.user.getLoginHistory(limit: limit);
     } catch (e) {
-      // The repository no longer swallows errors, so a failure here
-      // is real. Surface it in the SnackBar so we can finally see
-      // *why* the toggle did nothing on the phone.
-      debugPrint('goOnline failed: $e');
-      _presenceError = e.toString();
-      return false;
+      debugPrint('loadLoginHistory failed: $e');
+      _loginHistoryError = e.toString();
     } finally {
-      _isOnlineToggling = false;
-      notifyListeners();
-    }
-  }
-
-  /// Explicitly drop the student's own row. Safe to call when already
-  /// offline — the server RPC just no-ops in that case.
-  Future<bool> goOffline() async {
-    if (_isOnlineToggling) return false;
-    _isOnlineToggling = true;
-    _presenceError = null;
-    notifyListeners();
-    try {
-      await bundle.user.removeOwnSession();
-      // Remove the row from the local cache immediately so the UI
-      // updates without waiting for the realtime subscription.
-      final me = _selfAuthId;
-      if (me != null) {
-        _activeSessions = _activeSessions.where((s) => s.id != me).toList();
-      }
-      _log(
-        scope: ActivityScope.student,
-        icon: Icons.wifi_tethering_off_rounded,
-        tone: PupColors.ashGray,
-        title: 'You\'re offline',
-        subtitle: 'Admin won\'t see you on the Live tab.',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('goOffline failed: $e');
-      _presenceError = e.toString();
-      return false;
-    } finally {
-      _isOnlineToggling = false;
+      _loginHistoryLoading = false;
       notifyListeners();
     }
   }

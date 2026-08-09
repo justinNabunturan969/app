@@ -201,6 +201,13 @@ during your defense.
 - Promote an admin only in the SQL Editor or a server-side service using the
   service-role key. Never put the service-role key in this Flutter app.
 - Configure **password recovery** email template.
+- In **Authentication → URL Configuration**, add these redirect URLs before
+  using password recovery:
+  - `https://YOUR-DEPLOYMENT/reset-password` (or
+    `https://YOUR-DEPLOYMENT/**` for Vercel preview deployments)
+  - `pupitech://auth/reset-password` for Android/iOS builds.
+  The app sends the user to its `/reset-password` screen after they click the
+  email link, where they can choose a new password.
 - Add a **favorites** table so the heart icon persists server-side.
 - Add an `equipment_likes (profile_id, equipment_id)` table with RLS:
   ```sql

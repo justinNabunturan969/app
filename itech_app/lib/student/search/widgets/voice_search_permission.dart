@@ -1,14 +1,10 @@
 import 'dart:async';
-import 'dart:js_interop';
-// `JSObject[]` and `JSObject.getProperty` live in the `_unsafe`
-// library; the safe `dart:js_interop` only exposes the interop
-// extension types themselves. The escape hatch is fine here — we
-// only read two known string properties off a result we built
-// ourselves in `web/index.html`.
-import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart' as st;
+
+import 'voice_search_permission_stub.dart'
+    if (dart.library.js_interop) 'voice_search_permission_web.dart';
 
 /// What happened when we asked the browser / OS for microphone access.
 ///
@@ -71,40 +67,19 @@ class MicrophonePermission {
   // ── Web ─────────────────────────────────────────────────────────────
 
   static Future<MicrophonePermissionStatus> _requestWeb() async {
-    try {
-      final result = await _jsRequestMic().toDart;
-      // `dart:js_interop_unsafe` exposes JS object properties through
-      // the `[]` operator on `JSObject` (the older `getProperty` accessor
-      // was removed). We pull `granted` and `reason` out of the shape
-      // produced by the `__pupRequestMic` bridge in `web/index.html`.
-      final grantedRaw = result['granted'];
-      if (grantedRaw.isA<JSBoolean>()) {
-        final granted = (grantedRaw as JSBoolean).toDart;
-        if (granted) return MicrophonePermissionStatus.granted;
-      }
-      final reason = _readReason(result);
-      switch (reason) {
-        case 'denied':
-          return MicrophonePermissionStatus.denied;
-        case 'insecure':
-          return MicrophonePermissionStatus.insecure;
-        case 'no_microphone':
-          return MicrophonePermissionStatus.noMicrophone;
-        default:
-          return MicrophonePermissionStatus.unsupported;
-      }
-    } on Object catch (e) {
-      debugPrint('MicrophonePermission: JS bridge failed: $e');
-      return MicrophonePermissionStatus.unsupported;
+    final reason = await webRequestMic();
+    switch (reason) {
+      case 'granted':
+        return MicrophonePermissionStatus.granted;
+      case 'denied':
+        return MicrophonePermissionStatus.denied;
+      case 'insecure':
+        return MicrophonePermissionStatus.insecure;
+      case 'no_microphone':
+        return MicrophonePermissionStatus.noMicrophone;
+      default:
+        return MicrophonePermissionStatus.unsupported;
     }
-  }
-
-  static String _readReason(JSObject result) {
-    final raw = result['reason'];
-    if (raw.isA<JSString>()) {
-      return (raw as JSString).toDart;
-    }
-    return '';
   }
 
   // ── Native ──────────────────────────────────────────────────────────
@@ -125,9 +100,3 @@ class MicrophonePermission {
     return MicrophonePermissionStatus.unsupported;
   }
 }
-
-// ── JS bridge ────────────────────────────────────────────────────────
-// `window.__pupRequestMic` is registered by the inline script at the
-// bottom of `web/index.html`. It returns a Promise<{granted, reason}>.
-@JS('window.__pupRequestMic')
-external JSPromise<JSObject> _jsRequestMic();

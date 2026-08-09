@@ -113,13 +113,13 @@ class AuthSessionStorage {
   /// Sign the user in with Supabase Auth, then persist the role hint and
   /// the optional "Remember Me" credentials.
   ///
-  /// Students may enter their **Student ID** or their PUP email plus password.
-  /// An email is passed to Supabase unchanged; an ID is first looked up
-  /// in the `profiles` table (via the `auth_email_for_student_id` RPC) so
-  /// newly-created accounts — which use the PUP webmail as their auth
-  /// identity — can also be reached by their student number. Falls back
-  /// to the legacy synthetic email form for any pre-existing account
-  /// that was created without a `profiles.student_id` link.
+  /// Students may enter their **PUP email** or, for older demo accounts, a
+  /// Student ID plus password. An email is passed to Supabase unchanged;
+  /// an ID maps only to the legacy synthetic-email convention.
+  ///
+  /// We intentionally do not look up a student ID in `profiles` before
+  /// authentication. A public lookup endpoint would let anyone enumerate
+  /// student IDs and recover their email addresses.
   Future<void> saveStudentSession({
     required String studentId,
     required String email,
@@ -130,17 +130,14 @@ class AuthSessionStorage {
     final rawIdentifier = email.isNotEmpty ? email.trim() : studentId.trim();
     final loginIdentifier = studentId.isNotEmpty ? studentId : email;
 
-    // Pick the email to send to Supabase Auth. For a PUP webmail
-    // (`@`-bearing input) we use it as-is. For a bare student ID we
-    // first try the RPC lookup so a PUP-webmail-anchored account can
-    // still be reached by its school number; if that fails we fall
-    // back to the legacy synthetic form for older accounts.
+    // Pick the email to send to Supabase Auth. A PUP webmail is used as-is;
+    // a bare student ID supports only the historical synthetic-email demo
+    // accounts. New accounts should always sign in with their PUP webmail.
     String derivedEmail;
     if (rawIdentifier.contains('@')) {
       derivedEmail = rawIdentifier.toLowerCase();
     } else {
-      final resolved = await resolveAuthEmailForStudentId(rawIdentifier);
-      derivedEmail = resolved ?? studentAuthEmailFor(rawIdentifier);
+      derivedEmail = studentAuthEmailFor(rawIdentifier);
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -201,29 +198,6 @@ class AuthSessionStorage {
     if (cleaned.isEmpty) return '';
     if (cleaned.contains('@')) return cleaned;
     return '$cleaned@pupitech.local';
-  }
-
-  /// Resolve a Student ID to its PUP webmail by calling the
-  /// `auth_email_for_student_id` SQL helper. Returns null when no
-  /// profile row matches — callers should surface a generic
-  /// "no account with that student ID" rather than leaking the list
-  /// of valid student IDs in the database.
-  Future<String?> resolveAuthEmailForStudentId(String studentId) async {
-    final cleaned = studentId.trim();
-    if (cleaned.isEmpty) return null;
-    try {
-      final result = await _supabase.rpc(
-        'auth_email_for_student_id',
-        params: {'lookup_id': cleaned},
-      );
-      if (result is String && result.isNotEmpty) return result;
-      if (result is List && result.isNotEmpty) {
-        return result.first?.toString();
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Create a new student account.

@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:js_interop';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/repositories/user_repository.dart';
+import 'session_lifecycle_guard_stub.dart'
+    if (dart.library.js_interop) 'session_lifecycle_guard_web.dart';
 
 /// Keeps the current user's `active_sessions` row in sync with the
 /// app's actual lifecycle.
@@ -51,7 +52,7 @@ class SessionLifecycleGuard extends StatefulWidget {
 
 class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   AppLifecycleListener? _listener;
-  JSFunction? _webVisibilityFn;
+  Object? _webVisibilityHandle;
   Timer? _heartbeat;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -113,9 +114,8 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
       // milliseconds instead of waiting up to 30s for the next
       // heartbeat tick. We do **not** drop the row on `hidden` —
       // see the class docstring for why that was the bug.
-      _webVisibilityFn = _registerVisibilityChange((event) {
-        final state = _documentVisibilityState();
-        if (state == 'visible') unawaited(_markOnline());
+      _webVisibilityHandle = registerVisibilityChange(() {
+        unawaited(_markOnline());
       });
     }
   }
@@ -125,8 +125,8 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     _listener?.dispose();
     _heartbeat?.cancel();
     _authSubscription?.cancel();
-    if (kIsWeb && _webVisibilityFn != null) {
-      _unregisterVisibilityChange(_webVisibilityFn!);
+    if (kIsWeb && _webVisibilityHandle != null) {
+      unregisterVisibilityChange(_webVisibilityHandle!);
     }
     super.dispose();
   }
@@ -149,29 +149,4 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
       // Best effort.
     }
   }
-}
-
-// ── Web bridge ────────────────────────────────────────────────────────
-// dart:js_interop is available on every platform, but `window`,
-// `document`, and `addEventListener` only exist on the web target.
-// We guard the call site with `kIsWeb` (above) and wrap the externs
-// in a JS-accessible shape so the calls are type-safe from Dart.
-
-@JS('window.addEventListener')
-external void _windowAddEventListener(JSAny type, JSAny listener);
-
-@JS('window.removeEventListener')
-external void _windowRemoveEventListener(JSAny type, JSAny listener);
-
-@JS('document.visibilityState')
-external String? _documentVisibilityState();
-
-JSFunction _registerVisibilityChange(void Function(JSObject event) handler) {
-  final fn = ((JSObject e) => handler(e)).toJS;
-  _windowAddEventListener('visibilitychange'.toJS, fn);
-  return fn;
-}
-
-void _unregisterVisibilityChange(JSFunction fn) {
-  _windowRemoveEventListener('visibilitychange'.toJS, fn);
 }

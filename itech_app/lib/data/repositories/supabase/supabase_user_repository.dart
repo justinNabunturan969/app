@@ -220,4 +220,126 @@ class SupabaseUserRepository implements UserRepository {
       params: {'p_profile_id': profileId, 'p_reason': 'force_logout'},
     );
   }
+
+  /// Admin-only audit log: every row in `session_history` joined with
+  /// the matching `profiles` row. RLS in migration 0006 already gates
+  /// the read to admins (`session_history_admin_read`).
+  ///
+  /// We then enrich each entry with the number + names of borrowings
+  /// that were created during the `(logged_in_at, ended_at)` window
+  /// so the admin can see *what* the user did during the session.
+  /// The activity lookup is a single batched query keyed on the set of
+  /// `profile_id`s from the fetched sessions, so the cost is O(1)
+  /// round-trips regardless of `limit`.
+  @override
+  Future<List<LoginHistoryEntry>> getLoginHistory({int limit = 100}) async {
+    if (_client.auth.currentUser == null) return const [];
+
+    final rows = await _client
+        .from('session_history')
+        .select(
+          'id, profile_id, logged_in_at, last_activity_at, ended_at, end_reason, '
+          'profiles:profile_id ( '
+          '  student_id, full_name, email, program, year_level, section, role '
+          ')',
+        )
+        .order('ended_at', ascending: false)
+        .limit(limit);
+
+    if (rows.isEmpty) return const [];
+
+    final entries = rows
+        .map<LoginHistoryEntry?>(_loginHistoryFromRow)
+        .whereType<LoginHistoryEntry>()
+        .toList(growable: false);
+    if (entries.isEmpty) return const [];
+
+    // Batched activity lookup: borrowings whose `requested_at` falls
+    // inside any of the session windows we just fetched.
+    final profileIds = entries.map((e) => e.profileId).toSet().toList();
+    final earliest = entries
+        .map((e) => e.loggedInAt)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+
+    final borrows = await _client
+        .from('borrowings')
+        .select('student_id, equipment_id, requested_at, equipment ( name )')
+        .inFilter('student_id', profileIds)
+        .gte('requested_at', earliest.toIso8601String());
+
+    final byProfile = <String, List<Map<String, dynamic>>>{};
+    for (final row in borrows) {
+      final pid = row['student_id'] as String?;
+      if (pid == null) continue;
+      (byProfile[pid] ??= <Map<String, dynamic>>[]).add(row);
+    }
+
+    return entries.map((e) {
+      final events = byProfile[e.profileId] ?? const [];
+      final inside = events.where((b) {
+        final t = DateTime.tryParse((b['requested_at'] as String?) ?? '');
+        if (t == null) return false;
+        return !t.isBefore(e.loggedInAt) && !t.isAfter(e.endedAt);
+      }).toList();
+      final names = <String>[];
+      for (final b in inside) {
+        final equip = b['equipment'];
+        if (equip is Map && equip['name'] is String) {
+          names.add(equip['name'] as String);
+        }
+      }
+      return LoginHistoryEntry(
+        id: e.id,
+        profileId: e.profileId,
+        studentId: e.studentId,
+        fullName: e.fullName,
+        email: e.email,
+        program: e.program,
+        yearLevel: e.yearLevel,
+        section: e.section,
+        role: e.role,
+        loggedInAt: e.loggedInAt,
+        lastActivityAt: e.lastActivityAt,
+        endedAt: e.endedAt,
+        endReason: e.endReason,
+        borrowingsDuringSession: inside.length,
+        activityNames: names.length > 5 ? names.sublist(0, 5) : names,
+      );
+    }).toList(growable: false);
+  }
+
+  static LoginHistoryEntry? _loginHistoryFromRow(Map<String, dynamic> row) {
+    final profile = row['profiles'] as Map<String, dynamic>?;
+    if (profile == null) return null; // orphaned row, skip it
+    final id = row['id'] as String?;
+    final profileId = row['profile_id'] as String?;
+    if (id == null || profileId == null) return null;
+
+    return LoginHistoryEntry(
+      id: id,
+      profileId: profileId,
+      studentId: (profile['student_id'] as String?) ?? profileId,
+      fullName:
+          (profile['full_name'] as String?) ??
+          (profile['email'] as String?) ??
+          'Unknown user',
+      email: (profile['email'] as String?) ?? '',
+      program: (profile['program'] as String?) ?? '',
+      yearLevel: (profile['year_level'] as String?) ?? '',
+      section: (profile['section'] as String?) ?? '',
+      role: (profile['role'] as String?) ?? 'student',
+      loggedInAt:
+          DateTime.tryParse((row['logged_in_at'] as String?) ?? '') ??
+          DateTime.now(),
+      lastActivityAt:
+          DateTime.tryParse((row['last_activity_at'] as String?) ?? '') ??
+          DateTime.now(),
+      endedAt:
+          DateTime.tryParse((row['ended_at'] as String?) ?? '') ??
+          DateTime.now(),
+      endReason: (row['end_reason'] as String?) ?? 'closed',
+      borrowingsDuringSession: 0,
+      activityNames: const [],
+    );
+  }
 }

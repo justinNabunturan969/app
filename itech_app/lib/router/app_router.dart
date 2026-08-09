@@ -7,6 +7,7 @@ import '../screens/onboarding/welcome_screen.dart';
 import '../screens/role_selection/role_selection_screen.dart';
 import '../auth/login/student_login_screen.dart';
 import '../auth/login/admin_login_screen.dart';
+import '../auth/login/reset_password_screen.dart';
 import '../auth/signup/student_signup_screen.dart';
 import '../screens/design_system/design_system_screen.dart';
 import '../screens/shell/student_shell.dart';
@@ -33,10 +34,8 @@ class AppRouter {
       GoRoute(
         path: '/launching',
         name: 'launching',
-        pageBuilder: (context, state) => _fadeScalePage(
-          key: state.pageKey,
-          child: const LaunchLoader(),
-        ),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(key: state.pageKey, child: const LaunchLoader()),
       ),
       GoRoute(
         path: '/welcome',
@@ -75,6 +74,14 @@ class AppRouter {
             _leftSlidePage(key: state.pageKey, child: const AdminLoginScreen()),
       ),
       GoRoute(
+        path: '/reset-password',
+        name: 'resetPassword',
+        pageBuilder: (context, state) => _fadeScalePage(
+          key: state.pageKey,
+          child: const ResetPasswordScreen(),
+        ),
+      ),
+      GoRoute(
         path: '/student/shell',
         name: 'studentShell',
         pageBuilder: (context, state) =>
@@ -109,6 +116,10 @@ class AppRouter {
     final loggedIn = await authStorage.isLoggedIn();
     final role = await authStorage.getRole();
     final loc = state.matchedLocation;
+
+    // Supabase redirects recovery links here with a short-lived session. Do
+    // not bounce that session through the normal signed-in home redirect.
+    if (loc == '/reset-password') return null;
 
     const authEntryRoutes = {
       // /launching is the entry point — it self-routes after the

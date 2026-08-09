@@ -79,6 +79,16 @@ abstract class UserRepository {
   /// call this — the Supabase bundle relies on the RLS policy
   /// `is_admin()` to gate it server-side.
   Future<void> removeSessionById(String profileId);
+
+  /// Admin-only audit log: every row in `session_history` joined with
+  /// the matching `profiles` row, plus a count of borrowings that
+  /// happened during each session window. Newest first.
+  ///
+  /// RLS in the Supabase bundle restricts this to admins via the
+  /// `session_history_admin_read` policy (see migration 0006). The
+  /// mock bundle just hands back the seed list from
+  /// `StudentMockData.loginHistory`.
+  Future<List<LoginHistoryEntry>> getLoginHistory({int limit = 100});
 }
 
 /// Mock implementation — reads from `StudentMockData`.
@@ -139,5 +149,13 @@ class MockUserRepository implements UserRepository {
   Future<void> removeSessionById(String profileId) async {
     // No-op for the mock — the kick UI already removes the row from
     // the local cache; there's no DB to keep in sync.
+  }
+
+  @override
+  Future<List<LoginHistoryEntry>> getLoginHistory({int limit = 100}) async {
+    // The mock simply hands back the seed list (already newest first).
+    final list = StudentMockData.loginHistory;
+    if (list.length <= limit) return List.unmodifiable(list);
+    return List.unmodifiable(list.take(limit));
   }
 }
