@@ -245,6 +245,108 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
+  // ── Self presence (student's own row in active_sessions) ────────────
+  // The student shell gets to *see* and *control* its own row, so the
+  // home screen can render a "You're online" indicator and the student
+  // can explicitly check in / out instead of relying on the background
+  // heartbeat surviving browser tab throttling on mobile.
+
+  /// The auth id of the currently signed-in user. The `active_sessions`
+  /// table is keyed on this UUID (`profile_id`), not on
+  /// `profiles.student_id` (the school number). Resolved through the
+  /// repository so the controller doesn't have to import the Supabase
+  /// client directly.
+  String? get _selfAuthId => bundle.user.currentAuthId;
+
+  /// The student's own `ActiveSession`, or null when the row doesn't
+  /// exist. Drives the "You're online" / "Tap to go online" card on
+  /// the student home.
+  ActiveSession? get selfSession {
+    final me = _selfAuthId;
+    if (me == null) return null;
+    for (final s in _activeSessions) {
+      if (s.id == me) return s;
+    }
+    return null;
+  }
+
+  /// True when the student has a row in `active_sessions` — i.e. is
+  /// visible to the admin's Live tab.
+  bool get isSelfOnline => selfSession != null;
+
+  /// True while a `goOnline` / `goOffline` round-trip is in flight,
+  /// so the toggle on the home screen can show a spinner and ignore
+  /// double-taps.
+  bool _isOnlineToggling = false;
+  bool get isOnlineToggleInProgress => _isOnlineToggling;
+
+  /// Explicitly create (or refresh) the student's own row in
+  /// `active_sessions`. Idempotent — calling it while already online
+  /// is a no-op for the local state but still pings the server so
+  /// `last_activity_at` is fresh.
+  Future<bool> goOnline() async {
+    if (_isOnlineToggling) return false;
+    _isOnlineToggling = true;
+    notifyListeners();
+    try {
+      await bundle.user.markOwnSessionActive();
+      // Re-fetch the list so the new row is in `_activeSessions` and
+      // `selfSession` / `isSelfOnline` reflect the truth without
+      // waiting for the realtime subscription to round-trip.
+      try {
+        _activeSessions = await bundle.user.getActiveSessions();
+      } catch (_) {
+        // The realtime subscription will fill this in momentarily;
+        // don't surface the error to the UI.
+      }
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.wifi_tethering_rounded,
+        tone: PupColors.mintGreen,
+        title: 'You\'re online',
+        subtitle: 'Admin can see you on the Live tab.',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('goOnline failed: $e');
+      return false;
+    } finally {
+      _isOnlineToggling = false;
+      notifyListeners();
+    }
+  }
+
+  /// Explicitly drop the student's own row. Safe to call when already
+  /// offline — the server RPC just no-ops in that case.
+  Future<bool> goOffline() async {
+    if (_isOnlineToggling) return false;
+    _isOnlineToggling = true;
+    notifyListeners();
+    try {
+      await bundle.user.removeOwnSession();
+      // Remove the row from the local cache immediately so the UI
+      // updates without waiting for the realtime subscription.
+      final me = _selfAuthId;
+      if (me != null) {
+        _activeSessions = _activeSessions.where((s) => s.id != me).toList();
+      }
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.wifi_tethering_off_rounded,
+        tone: PupColors.ashGray,
+        title: 'You\'re offline',
+        subtitle: 'Admin won\'t see you on the Live tab.',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('goOffline failed: $e');
+      return false;
+    } finally {
+      _isOnlineToggling = false;
+      notifyListeners();
+    }
+  }
+
   // ── Load (initial + pull-to-refresh) ───────────────────────────────────
 
   /// Pull every list the screens need from the bundle in parallel. Safe

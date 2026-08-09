@@ -151,6 +151,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                                 program: ctrl.studentProgram,
                               ),
                               const SizedBox(height: 12),
+                              // Explicit presence card — the student can see
+                              // whether the admin's Live tab sees them, and
+                              // tap to flip the state. Reliable even when
+                              // the auto-heartbeat is throttled by the
+                              // mobile browser.
+                              _PresenceCard(
+                                isOnline: ctrl.isSelfOnline,
+                                isToggling: ctrl.isOnlineToggleInProgress,
+                                onToggle: () {
+                                  if (ctrl.isSelfOnline) {
+                                    ctrl.goOffline();
+                                  } else {
+                                    ctrl.goOnline();
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
                               // 3-up stats row (no horizontal scroll)
                               Row(
                                 children: [
@@ -421,6 +438,215 @@ class _GreetingHeader extends StatelessWidget {
         const SizedBox(width: 6),
         const ThemeMenuButton(),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Presence card — the student can see & control whether they appear
+// on the admin's Live tab. The auto-heartbeat in the lifecycle guard
+// still keeps the row warm while the app is in the foreground, but
+// this card gives the student a reliable manual override for when
+// the browser tab is throttled in the background.
+// ─────────────────────────────────────────────────────────────────────────
+
+class _PresenceCard extends StatelessWidget {
+  const _PresenceCard({
+    required this.isOnline,
+    required this.isToggling,
+    required this.onToggle,
+  });
+
+  final bool isOnline;
+  final bool isToggling;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
+    final subtleText = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
+        : PupColors.ashGray;
+
+    final color = isOnline ? PupColors.mintGreen : PupColors.ashGray;
+    final title = isOnline ? "You're online" : 'Go online';
+    final subtitle = isOnline
+        ? 'Admin can see you on the Live tab.'
+        : 'Tap to show you are in the lab.';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isToggling ? null : onToggle,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.10 : 0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: color.withValues(alpha: 0.45),
+              width: 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _PulseDot(color: color, isPulsing: isOnline),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: subtleText,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (isToggling)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                )
+              else
+                Icon(
+                  isOnline
+                      ? Icons.toggle_on_rounded
+                      : Icons.toggle_off_rounded,
+                  color: color,
+                  size: 30,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small pulsing dot that animates while the user is online. Pauses
+/// when the parent is off-screen — it's a SingleTickerProvider so
+/// the AnimationController is bound to the widget's lifetime.
+class _PulseDot extends StatefulWidget {
+  const _PulseDot({required this.color, required this.isPulsing});
+
+  final Color color;
+  final bool isPulsing;
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (widget.isPulsing) _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PulseDot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPulsing && !_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    } else if (!widget.isPulsing && _ctrl.isAnimating) {
+      _ctrl.stop();
+      _ctrl.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, _) {
+        final v = _ctrl.value;
+        return SizedBox(
+          width: 22,
+          height: 22,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (widget.isPulsing)
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.20 + v * 0.25),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  shape: BoxShape.circle,
+                  boxShadow: widget.isPulsing
+                      ? [
+                          BoxShadow(
+                            color: widget.color.withValues(
+                              alpha: 0.55 + v * 0.35,
+                            ),
+                            blurRadius: 6 + v * 8,
+                            spreadRadius: v * 1.5,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

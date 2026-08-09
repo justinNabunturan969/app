@@ -12,6 +12,9 @@ class SupabaseUserRepository implements UserRepository {
   SupabaseClient get _client => Supabase.instance.client;
 
   @override
+  String? get currentAuthId => _client.auth.currentUser?.id;
+
+  @override
   Future<UserProfile> getCurrentUser() async {
     final user = _client.auth.currentUser;
     if (user == null) {
@@ -108,7 +111,16 @@ class SupabaseUserRepository implements UserRepository {
         )
         .gte(
           'last_activity_at',
-          DateTime.now().subtract(const Duration(minutes: 2)).toIso8601String(),
+          // 5-minute client filter. The server's `expire_stale_sessions`
+          // (matching 5-minute window in migration 0009) is the source of
+          // truth; this just keeps the in-memory list from being filled
+          // with rows the server has already swept. Loosened from 2 min
+          // because mobile browsers throttle background timers, so a
+          // student who briefly backgrounded the app can come back
+          // without their row being invisible to the admin.
+          DateTime.now()
+              .subtract(const Duration(minutes: 5))
+              .toIso8601String(),
         )
         .order('last_activity_at', ascending: false);
 

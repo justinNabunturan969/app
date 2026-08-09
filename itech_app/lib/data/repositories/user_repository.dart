@@ -32,6 +32,13 @@ class UserProfile {
 /// `activeSessions` list for the offline demo.
 /// Tomorrow: `FirebaseUserRepository` returns the Firestore user doc.
 abstract class UserRepository {
+  /// The auth UUID of the currently signed-in user, or null when
+  /// signed out. The `active_sessions` table is keyed on this
+  /// value (not on `profiles.student_id`), so the controller needs
+  /// it to correlate the user's own row in the live-occupancy feed
+  /// with the signed-in account.
+  String? get currentAuthId;
+
   Future<UserProfile> getCurrentUser();
 
   /// Updates the editable, non-privileged fields of the signed-in profile.
@@ -77,6 +84,9 @@ abstract class UserRepository {
 /// Mock implementation — reads from `StudentMockData`.
 class MockUserRepository implements UserRepository {
   const MockUserRepository();
+
+  @override
+  String? get currentAuthId => null;
 
   @override
   Future<UserProfile> getCurrentUser() async {
