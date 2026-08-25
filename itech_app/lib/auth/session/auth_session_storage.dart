@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -73,53 +74,62 @@ class AuthSessionStorage {
     return _supabase.auth.currentSession != null;
   }
 
-  /// Read the role from the cached local hint. If the hint is missing but
-  /// we *do* have a Supabase session, ask the server for the role.
+  /// Read the user's role.
+  ///
+  /// The local hint is only a *fallback*. On every call where a Supabase
+  /// session exists we re-read the role from `profiles` and overwrite the
+  /// cache, so a demoted admin is routed to the student shell on their
+  /// very next app start instead of keeping a stale admin shell until
+  /// they manually sign out. The cached value is used only when the
+  /// network read fails (offline launch) or there is no session yet.
   Future<UserRole?> getRole() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_roleKey);
-    if (cached != null) {
-      return switch (cached) {
-        'student' => UserRole.student,
-        'admin' => UserRole.admin,
-        _ => null,
-      };
-    }
 
-    // No cache. If we have a Supabase session but no role hint, look up
-    // the profile to find out what role they are.
+    // Always prefer the live value when we have a session.
     final user = _supabase.auth.currentUser;
-    if (user == null) return null;
-    try {
-      final row = await _supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-      final role = (row['role'] as String?) ?? 'student';
-      await prefs.setString(_roleKey, role);
-      return switch (role) {
-        'admin' => UserRole.admin,
-        _ => UserRole.student,
-      };
-    } catch (_) {
-      // RLS may block the read if the trigger hasn't run yet, or the
-      // session is still hydrating. Fall through and return null so the
-      // router can bounce the user to /splash instead of /shell.
+    if (user != null) {
+      try {
+        final row = await _supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+        final role = (row['role'] as String?) ?? 'student';
+        await prefs.setString(_roleKey, role);
+        return switch (role) {
+          'admin' => UserRole.admin,
+          _ => UserRole.student,
+        };
+      } catch (_) {
+        // RLS may block the read if the trigger hasn't run yet, or the
+        // device is offline. Fall through to the cached hint below so an
+        // offline launch still routes somewhere sensible.
+      }
+    } else {
+      // No session at all — the cached hint must never grant access after
+      // the secure session has expired or been revoked.
+      await prefs.remove(_roleKey);
       return null;
     }
+
+    final cached = prefs.getString(_roleKey);
+    if (cached == null) return null;
+    return switch (cached) {
+      'student' => UserRole.student,
+      'admin' => UserRole.admin,
+      _ => null,
+    };
   }
 
   /// Sign the user in with Supabase Auth, then persist the role hint and
   /// the optional "Remember Me" credentials.
   ///
-  /// Students may enter their **PUP email** or, for older demo accounts, a
-  /// Student ID plus password. An email is passed to Supabase unchanged;
-  /// an ID maps only to the legacy synthetic-email convention.
-  ///
-  /// We intentionally do not look up a student ID in `profiles` before
-  /// authentication. A public lookup endpoint would let anyone enumerate
-  /// student IDs and recover their email addresses.
+  /// Students may enter their **PUP email** or their Student ID plus
+  /// password. An email is passed to Supabase Auth unchanged. A bare ID is
+  /// resolved to its real auth email by the `sign_in_identifier` RPC, which
+  /// verifies the password server-side before revealing the mapping — so a
+  /// student number can never be turned into an email address without
+  /// presenting valid credentials.
   Future<void> saveStudentSession({
     required String studentId,
     required String email,
@@ -130,21 +140,13 @@ class AuthSessionStorage {
     final rawIdentifier = email.isNotEmpty ? email.trim() : studentId.trim();
     final loginIdentifier = studentId.isNotEmpty ? studentId : email;
 
-    // Pick the email to send to Supabase Auth. A PUP webmail is used as-is;
-    // a bare student ID supports only the historical synthetic-email demo
-    // accounts. New accounts should always sign in with their PUP webmail.
-    String derivedEmail;
-    if (rawIdentifier.contains('@')) {
-      derivedEmail = rawIdentifier.toLowerCase();
-    } else {
-      derivedEmail = studentAuthEmailFor(rawIdentifier);
-    }
+    final authEmail = await _resolveAuthEmail(rawIdentifier, password);
 
     final prefs = await SharedPreferences.getInstance();
     if (!rememberMe) {
       // Even if rememberMe is off, we still sign the user in for this
       // session — but we wipe any previously-saved credentials.
-      await _signInOrThrow(email: derivedEmail, password: password);
+      await _signInOrThrow(email: authEmail, password: password);
       await prefs.remove(_rememberKey);
       await _clearStudentFields(prefs);
       await _clearAdminFields(prefs);
@@ -153,12 +155,12 @@ class AuthSessionStorage {
       return;
     }
 
-    await _signInOrThrow(email: derivedEmail, password: password);
+    await _signInOrThrow(email: authEmail, password: password);
     await prefs.setBool(_loggedInKey, true);
     await prefs.setString(_roleKey, 'student');
     await prefs.setBool(_rememberKey, true);
     await prefs.setString(_studentIdKey, loginIdentifier);
-    await prefs.setString(_studentEmailKey, derivedEmail);
+    await prefs.setString(_studentEmailKey, authEmail);
     await prefs.setString(_studentUsernameKey, username);
     // Remove passwords written by older builds. Keep only the identifier.
     await prefs.remove(_studentPasswordKey);
@@ -191,8 +193,10 @@ class AuthSessionStorage {
     );
   }
 
-  /// Convert a PUP student number into the legacy synthetic email, or retain
-  /// a PUP email unchanged.
+  /// Legacy helper: normalize an identifier, mapping a bare student number
+  /// onto the historical synthetic-email convention. Sign-in no longer uses
+  /// this — real accounts are resolved server-side via `sign_in_identifier`
+  /// — but the mapping still describes how old demo accounts were created.
   static String studentAuthEmailFor(String identifier) {
     final cleaned = identifier.trim().toLowerCase();
     if (cleaned.isEmpty) return '';
@@ -233,23 +237,27 @@ class AuthSessionStorage {
       data: {'student_id': cleanedStudentId, 'full_name': derivedName},
     );
 
-    // The trigger does the profile insert. We still write a follow-up
-    // upsert in case the trigger was skipped (older deployment) or the
-    // profile was created from a manual auth.users import without
-    // metadata. Best-effort — a failure here is non-fatal because the
-    // user is created either way.
+    // The trigger does the profile insert. This write is only a bootstrap
+    // for deployments where the trigger missed (older schema state, manual
+    // auth.users import). `ignoreDuplicates` makes it a strict no-op when
+    // the row already exists, so it can never trip the
+    // "Student ID cannot be changed" identity trigger on repeat sign-ups,
+    // and any real failure surfaces in the log instead of vanishing.
     final user = response.user;
     if (user != null) {
       try {
-        await _supabase.from('profiles').upsert({
-          'id': user.id,
-          'email': cleanedEmail,
-          'student_id': cleanedStudentId,
-          'full_name': derivedName,
-        });
-      } catch (_) {
-        // Swallow — the trigger already wrote a row, this is just a
-        // safety net for the older schema state.
+        await _supabase.from('profiles').upsert(
+          {
+            'id': user.id,
+            'email': cleanedEmail,
+            'student_id': cleanedStudentId,
+            'full_name': derivedName,
+          },
+          onConflict: 'id',
+          ignoreDuplicates: true,
+        );
+      } catch (e) {
+        debugPrint('Profile bootstrap skipped: $e');
       }
     }
 
@@ -366,6 +374,28 @@ class AuthSessionStorage {
 
   // ── Internals ───────────────────────────────────────────────────────
 
+  /// Map the login identifier onto the Supabase auth email.
+  ///
+  /// A PUP webmail is used as-is. A bare student ID is resolved through the
+  /// `sign_in_identifier` RPC, which verifies the password server-side and
+  /// therefore cannot be abused to enumerate who owns which ID. It returns
+  /// null (or raises on lockout) for unknown IDs or wrong passwords, both of
+  /// which surface to the user as a plain invalid-credentials error.
+  Future<String> _resolveAuthEmail(String identifier, String password) async {
+    final trimmed = identifier.trim();
+    if (trimmed.contains('@')) return trimmed.toLowerCase();
+
+    final resolved = await _supabase.rpc(
+      'sign_in_identifier',
+      params: {'p_identifier': trimmed, 'p_password': password},
+    );
+    final email = resolved is String ? resolved.trim().toLowerCase() : '';
+    if (email.isEmpty || !email.contains('@')) {
+      throw const AuthException('Invalid login credentials');
+    }
+    return email;
+  }
+
   Future<void> _signInOrThrow({
     required String email,
     required String password,
@@ -409,30 +439,51 @@ class AuthSessionStorage {
     );
   }
 
-  /// Write the student_id / role / name fields back onto the user's
-  /// profile row. Triggered on login so admin scan + occupancy screens
-  /// see the right names without an extra round-trip later.
+  /// Fill the student_id / full_name fields on the user's profile row.
+  /// Triggered on login so admin scan + occupancy screens see the right
+  /// names without an extra round-trip later.
+  ///
+  /// Existence is checked first: identity fields are only ever written when
+  /// they are still blank, so a normal login can never collide with the
+  /// "Student ID cannot be changed" trigger, and the bootstrap insert (for
+  /// accounts whose trigger never ran) is backed by the
+  /// `profiles_insert_self` policy.
   Future<void> _upsertProfile({
     String? studentId,
     String? fullName,
-    String? role,
   }) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    final patch = <String, dynamic>{};
-    if (studentId != null) patch['student_id'] = studentId;
-    if (fullName != null) patch['full_name'] = fullName;
-    if (role != null) patch['role'] = role;
-    if (patch.isEmpty) return;
+    if (studentId == null && fullName == null) return;
     try {
-      await _supabase.from('profiles').update(patch).eq('id', user.id);
-    } catch (_) {
-      // Profile might not exist yet (auth trigger hasn't run). Try insert.
-      try {
-        await _supabase.from('profiles').insert({'id': user.id, ...patch});
-      } catch (_) {
-        // Best-effort. The next successful load will retry.
+      final existing = await _supabase
+          .from('profiles')
+          .select('student_id, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (existing == null) {
+        final row = <String, dynamic>{'id': user.id};
+        if (user.email != null) row['email'] = user.email;
+        if (studentId != null) row['student_id'] = studentId;
+        if (fullName != null) row['full_name'] = fullName;
+        await _supabase.from('profiles').insert(row);
+        return;
       }
+
+      final patch = <String, dynamic>{};
+      final currentStudentId = existing['student_id'] as String?;
+      final currentFullName = existing['full_name'] as String?;
+      if (studentId != null && (currentStudentId == null || currentStudentId.isEmpty)) {
+        patch['student_id'] = studentId;
+      }
+      if (fullName != null && (currentFullName == null || currentFullName.isEmpty)) {
+        patch['full_name'] = fullName;
+      }
+      if (patch.isEmpty) return;
+      await _supabase.from('profiles').update(patch).eq('id', user.id);
+    } catch (e) {
+      debugPrint('Profile sync skipped: $e');
     }
   }
 

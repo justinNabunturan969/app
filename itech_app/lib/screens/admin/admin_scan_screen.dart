@@ -92,9 +92,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
   }
 
   Future<void> _cancelNfcScan() async {
-    await NfcService.instance.stopSession(
-      alertMessage: 'Scan cancelled.',
-    );
+    await NfcService.instance.stopSession(alertMessage: 'Scan cancelled.');
     _tapSub?.cancel();
     _tapSub = null;
     if (!mounted) return;
@@ -122,10 +120,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
       return;
     }
 
-    final active = [
-      ...ctrl.activeBorrowings,
-      ...ctrl.overdueBorrowings,
-    ];
+    final active = [...ctrl.activeBorrowings, ...ctrl.overdueBorrowings];
     final mine = active
         .where((b) => b.studentId == student.studentId)
         .toList(growable: false);
@@ -156,26 +151,38 @@ class _AdminScanScreenState extends State<AdminScanScreen>
         ? error.message
         : 'NFC read failed: $error';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
   }
 
   void _markReturned(StudentDashboardController ctrl, Borrowing b) {
     HapticFeedback.lightImpact();
-    ctrl.returnBorrowing(b.id);
-    if (!mounted) return;
-    setState(() {
-      _lastScanned = null;
-      _recentScans.remove(b);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${b.equipmentName} marked as returned'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    // Admin verifies the physical hand-in. This is the transition that
+    // credits inventory (migration 0014) — the student's own tap only
+    // puts the loan into the `return_requested` state.
+    unawaited(
+      ctrl.confirmReturnBorrowing(b.id).then((ok) {
+        if (!mounted) return;
+        if (ok) {
+          setState(() {
+            _lastScanned = null;
+            _recentScans.remove(b);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${b.equipmentName} return verified'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not verify return of ${b.equipmentName}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }),
     );
   }
 
@@ -260,11 +267,13 @@ class _AdminScanScreenState extends State<AdminScanScreen>
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: PupColors.signalRed,
                                 side: BorderSide(
-                                  color: PupColors.signalRed
-                                      .withValues(alpha: 0.6),
+                                  color: PupColors.signalRed.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -280,8 +289,9 @@ class _AdminScanScreenState extends State<AdminScanScreen>
                               style: FilledButton.styleFrom(
                                 backgroundColor: PupColors.techCyan,
                                 foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -307,8 +317,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
                       child: _ScanResultCard(
                         borrowing: _lastScanned!,
                         onReturn: () => _markReturned(ctrl, _lastScanned!),
-                        onClear: () =>
-                            setState(() => _lastScanned = null),
+                        onClear: () => setState(() => _lastScanned = null),
                       ),
                     ),
                   ),
@@ -337,8 +346,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
                           height: 3,
                           width: 28,
                           decoration: BoxDecoration(
-                            color:
-                                PupColors.pupMaroon.withValues(alpha: 0.6),
+                            color: PupColors.pupMaroon.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(999),
                           ),
                         ),
@@ -448,9 +456,7 @@ class _Viewfinder extends StatelessWidget {
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: CustomPaint(
-                  painter: _GridPainter(),
-                ),
+                child: CustomPaint(painter: _GridPainter()),
               ),
             ),
 
@@ -478,8 +484,9 @@ class _Viewfinder extends StatelessWidget {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: PupColors.techCyan
-                                    .withValues(alpha: 0.55),
+                                color: PupColors.techCyan.withValues(
+                                  alpha: 0.55,
+                                ),
                                 blurRadius: 12,
                                 spreadRadius: 1,
                               ),
@@ -598,10 +605,7 @@ class _Corner extends StatelessWidget {
       width: 28,
       height: 28,
       child: CustomPaint(
-        painter: _CornerPainter(
-          alignment: alignment,
-          color: color,
-        ),
+        painter: _CornerPainter(alignment: alignment, color: color),
       ),
     );
   }
@@ -755,10 +759,7 @@ class _ScanResultCard extends StatelessWidget {
           if (isOverdue) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: PupColors.signalRed.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -824,9 +825,7 @@ class _RecentScanRow extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.white,
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
@@ -837,11 +836,7 @@ class _RecentScanRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
-          Icon(
-            Icons.qr_code_rounded,
-            size: 18,
-            color: PupColors.techCyan,
-          ),
+          Icon(Icons.qr_code_rounded, size: 18, color: PupColors.techCyan),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -904,8 +899,9 @@ class _StudentIdentityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;

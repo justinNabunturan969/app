@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../student/models.dart';
@@ -49,8 +50,18 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
 
   @override
   Future<void> toggleLike(Equipment equipment) async {
-    // No-op until a `favorites` table exists. The existing prototype treats
-    // the heart toggle as in-memory state on the controller side, so the
-    // repo can stay a pass-through without breaking the UI.
+    // Intentional no-op: there is no `favorites` table yet, so likes are
+    // purely client-side state held by the dashboard controller and reset
+    // on every reload. The UI heart button is still shown because the
+    // prototype treats it as a demo interaction — once persistence is
+    // wanted, create a `favorites (profile_id, equipment_id)` table, add
+    // an RLS policy scoped to `auth.uid()`, and write the toggle here.
+    assert(() {
+      debugPrint(
+        'SupabaseEquipmentRepository.toggleLike: no favorites table yet; '
+        'like state for ${equipment.id} is not persisted.',
+      );
+      return true;
+    }());
   }
 }

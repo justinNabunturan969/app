@@ -84,17 +84,13 @@ class FilterChipsRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: isSelected
                     ? null
-                    : Border.all(
-                        color: PupColors.ashGray.withValues(alpha: 0.3),
-                      ),
+                    : Border.all(color: Colors.grey.withValues(alpha: 0.35)),
               ),
               child: Center(
                 child: Text(
                   spec.label,
                   style: TextStyle(
-                    color: isSelected
-                        ? const Color(0xFF1B1B1B)
-                        : PupColors.ashGray,
+                    color: isSelected ? Colors.white : PupColors.ashGray,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),

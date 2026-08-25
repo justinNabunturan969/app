@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../main.dart';
 import '../../env/supabase_config.dart';
 import '../../theme/design_tokens.dart';
-import '../session/auth_session_storage.dart';
 import '../validators/auth_validators.dart';
 import '../widgets/form_text_field.dart';
 import '../widgets/login_hero.dart';
@@ -140,7 +139,13 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   }
 
   Future<void> _showForgotPasswordDialog(BuildContext context) async {
-    final controller = TextEditingController(text: _studentId.text);
+    // Supabase emails the reset link, so we need a real address. A bare
+    // student ID cannot be translated here — resolving ID -> email requires
+    // proving the password (see sign_in_identifier), which a student who
+    // forgot theirs obviously cannot do. Ask for the PUP webmail instead.
+    final controller = TextEditingController(
+      text: _studentId.text.contains('@') ? _studentId.text.trim() : '',
+    );
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
@@ -152,10 +157,13 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           child: TextFormField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: 'Student ID or PUP email',
-              hintText: 'e.g., 2024-08721-MN-0 or student1@pup.edu.ph',
+              labelText: 'PUP webmail',
+              hintText: 'e.g., student1@pup.edu.ph',
+              helperText:
+                  'Enter the PUP email you registered with, not your '
+                  'student ID.',
             ),
-            validator: AuthValidators.validateStudentLogin,
+            validator: AuthValidators.validatePupEmail,
           ),
         ),
         actions: [
@@ -166,12 +174,9 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           FilledButton(
             onPressed: () async {
               if (!(formKey.currentState?.validate() ?? false)) return;
-              final email = AuthSessionStorage.studentAuthEmailFor(
-                controller.text,
-              );
               try {
                 await Supabase.instance.client.auth.resetPasswordForEmail(
-                  email,
+                  controller.text.trim().toLowerCase(),
                   redirectTo: SupabaseConfig.passwordResetRedirectUrl,
                 );
                 if (!ctx.mounted) return;

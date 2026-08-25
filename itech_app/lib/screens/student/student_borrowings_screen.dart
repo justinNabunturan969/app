@@ -505,6 +505,12 @@ class _BorrowingCard extends StatelessWidget {
           icon: Icons.bolt_rounded,
           label: 'Active',
         );
+      case BorrowingStatus.returnRequested:
+        return (
+          tone: PupColors.cyberAmber,
+          icon: Icons.assignment_return_rounded,
+          label: 'Return pending',
+        );
       case BorrowingStatus.overdue:
         return (
           tone: PupColors.signalRed,
@@ -539,6 +545,8 @@ class _BorrowingCard extends StatelessWidget {
       case BorrowingStatus.active:
       case BorrowingStatus.overdue:
         return 'Due';
+      case BorrowingStatus.returnRequested:
+        return 'Awaiting verification';
       case BorrowingStatus.returned:
       case BorrowingStatus.approved:
         return 'Returned';

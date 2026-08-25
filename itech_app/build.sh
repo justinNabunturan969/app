@@ -52,10 +52,11 @@ flutter pub get
 #    --no-tree-shake-icons: keep all material icons in the bundle so the
 #      first paint doesn't have to re-fetch them over the network.
 #
-#    Supabase credentials (if any) are read from the inlined defaults
-#    in lib/env/supabase_config.dart, so no --dart-define is required
-#    here. To override per-build, set SUPABASE_URL and SUPABASE_ANON_KEY
-#    in the Vercel project settings and the build will pick them up.
+#    Supabase credentials are NOT inlined in source. Set SUPABASE_URL and
+#    SUPABASE_ANON_KEY as environment variables (Vercel project settings →
+#    Environment Variables) and the build picks them up below. A build
+#    without them still succeeds, but the app shows the in-app
+#    "configuration required" screen at runtime instead of connecting.
 # ─────────────────────────────────────────────────────────────────────
 DART_DEFINES=""
 if [ -n "${SUPABASE_URL:-}" ]; then

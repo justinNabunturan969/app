@@ -105,48 +105,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
 
-                // Reassurance strip — tells first-time visitors the app
-                // is real and free, removes the duplicate hero line that
-                // used to live here.
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.verified_user_outlined,
-                        color: PupColors.cyberAmber,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Built for PUP-ITech students & faculty. '
-                          'Free, open-source, and works offline.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
+                const Text(
+                  'Innovation at Your Fingertips',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
 
-                const SizedBox(height: 18),
+                const SizedBox(height: 10),
                 Spacer(),
 
                 _PrimaryAmberButton(label: 'Get Started', onPressed: _goRole),
@@ -206,6 +176,8 @@ class _PressAnimatedButton extends StatefulWidget {
 
 class _PressAnimatedButtonState extends State<_PressAnimatedButton> {
   final bool _pressed = false;
+
+  // NOTE: keep non-const fields non-const to avoid const_with_non_const errors.
 
   @override
   Widget build(BuildContext context) {

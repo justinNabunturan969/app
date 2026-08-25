@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../student/models.dart';
+import '../auth_exceptions.dart';
 import '../user_repository.dart';
 
 /// Supabase-backed profile repository. Reads the row in `public.profiles`
@@ -78,13 +79,36 @@ class SupabaseUserRepository implements UserRepository {
     // The server records any abandoned session in the audit history before
     // removing it. A short heartbeat window handles browsers that close
     // before their final pagehide request can finish.
-    try {
-      await _client.rpc('expire_stale_sessions');
-    } catch (_) {
-      // Students are not allowed to run the admin-only sweep; their own
-      // query below remains correctly RLS-scoped.
+    //
+    // `expire_stale_sessions` is admin-only (it raises for everyone else),
+    // so only call it when the signed-in user is actually an admin.
+    // Previously every student poll paid one wasted round-trip that was
+    // always rejected and swallowed.
+    if (await _isAdmin()) {
+      try {
+        await _client.rpc('expire_stale_sessions');
+      } catch (_) {
+        // Sweep failure is non-fatal; the read below still works.
+      }
     }
     return _readActiveSessions();
+  }
+
+  /// Cheap role check against the caller's own profile row. RLS lets a
+  /// user always read their own row, so this is a single indexed lookup.
+  Future<bool> _isAdmin() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return false;
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      return (row?['role'] as String?) == 'admin';
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Subscribes to the underlying table, then reloads the joined view used by
@@ -101,6 +125,9 @@ class SupabaseUserRepository implements UserRepository {
   }
 
   Future<List<ActiveSession>> _readActiveSessions() async {
+    if (_client.auth.currentUser == null) {
+      throw const NotSignedInException('getActiveSessions');
+    }
     final rows = await _client
         .from('active_sessions')
         .select(
@@ -118,9 +145,7 @@ class SupabaseUserRepository implements UserRepository {
           // because mobile browsers throttle background timers, so a
           // student who briefly backgrounded the app can come back
           // without their row being invisible to the admin.
-          DateTime.now()
-              .subtract(const Duration(minutes: 5))
-              .toIso8601String(),
+          DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
         )
         .order('last_activity_at', ascending: false);
 
@@ -233,7 +258,9 @@ class SupabaseUserRepository implements UserRepository {
   /// round-trips regardless of `limit`.
   @override
   Future<List<LoginHistoryEntry>> getLoginHistory({int limit = 100}) async {
-    if (_client.auth.currentUser == null) return const [];
+    if (_client.auth.currentUser == null) {
+      throw const NotSignedInException('getLoginHistory');
+    }
 
     final rows = await _client
         .from('session_history')
@@ -274,38 +301,40 @@ class SupabaseUserRepository implements UserRepository {
       (byProfile[pid] ??= <Map<String, dynamic>>[]).add(row);
     }
 
-    return entries.map((e) {
-      final events = byProfile[e.profileId] ?? const [];
-      final inside = events.where((b) {
-        final t = DateTime.tryParse((b['requested_at'] as String?) ?? '');
-        if (t == null) return false;
-        return !t.isBefore(e.loggedInAt) && !t.isAfter(e.endedAt);
-      }).toList();
-      final names = <String>[];
-      for (final b in inside) {
-        final equip = b['equipment'];
-        if (equip is Map && equip['name'] is String) {
-          names.add(equip['name'] as String);
-        }
-      }
-      return LoginHistoryEntry(
-        id: e.id,
-        profileId: e.profileId,
-        studentId: e.studentId,
-        fullName: e.fullName,
-        email: e.email,
-        program: e.program,
-        yearLevel: e.yearLevel,
-        section: e.section,
-        role: e.role,
-        loggedInAt: e.loggedInAt,
-        lastActivityAt: e.lastActivityAt,
-        endedAt: e.endedAt,
-        endReason: e.endReason,
-        borrowingsDuringSession: inside.length,
-        activityNames: names.length > 5 ? names.sublist(0, 5) : names,
-      );
-    }).toList(growable: false);
+    return entries
+        .map((e) {
+          final events = byProfile[e.profileId] ?? const [];
+          final inside = events.where((b) {
+            final t = DateTime.tryParse((b['requested_at'] as String?) ?? '');
+            if (t == null) return false;
+            return !t.isBefore(e.loggedInAt) && !t.isAfter(e.endedAt);
+          }).toList();
+          final names = <String>[];
+          for (final b in inside) {
+            final equip = b['equipment'];
+            if (equip is Map && equip['name'] is String) {
+              names.add(equip['name'] as String);
+            }
+          }
+          return LoginHistoryEntry(
+            id: e.id,
+            profileId: e.profileId,
+            studentId: e.studentId,
+            fullName: e.fullName,
+            email: e.email,
+            program: e.program,
+            yearLevel: e.yearLevel,
+            section: e.section,
+            role: e.role,
+            loggedInAt: e.loggedInAt,
+            lastActivityAt: e.lastActivityAt,
+            endedAt: e.endedAt,
+            endReason: e.endReason,
+            borrowingsDuringSession: inside.length,
+            activityNames: names.length > 5 ? names.sublist(0, 5) : names,
+          );
+        })
+        .toList(growable: false);
   }
 
   static LoginHistoryEntry? _loginHistoryFromRow(Map<String, dynamic> row) {

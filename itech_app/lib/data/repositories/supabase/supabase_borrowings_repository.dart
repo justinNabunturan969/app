@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../student/models.dart';
+import '../auth_exceptions.dart';
 import '../borrowings_repository.dart';
 
 /// Supabase-backed borrowings repository. The four read buckets map to a
@@ -52,7 +53,17 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     );
     final borrowedAt = DateTime.tryParse((row['borrowed_at'] as String?) ?? '');
     final dueAt = DateTime.tryParse((row['due_at'] as String?) ?? '');
-    final returnedAt = DateTime.tryParse((row['returned_at'] as String?) ?? '');
+    var returnedAt = DateTime.tryParse((row['returned_at'] as String?) ?? '');
+
+    final status = _parseStatus((row['status'] as String?) ?? 'pending');
+
+    // A rejected request was never borrowed, so it has no return date —
+    // ignore any stray `returned_at` (older deployments stamped it on
+    // reject) so history doesn't display a fake return date.
+    if (status == BorrowingStatus.rejected ||
+        status == BorrowingStatus.pending) {
+      returnedAt = null;
+    }
 
     final borrowDate = borrowedAt ?? requestedAt ?? DateTime.now();
     final returnDate = returnedAt ?? dueAt ?? borrowDate;
@@ -66,7 +77,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       purpose: (row['purpose'] as String?) ?? '',
       borrowDate: borrowDate,
       returnDate: returnDate,
-      status: _parseStatus((row['status'] as String?) ?? 'pending'),
+      status: status,
       borrowedByYou: true,
       // The QR code on the prototype just round-trips the borrowing id; once
       // a real QR generator is wired up this would be the encoded payload.
@@ -83,6 +94,8 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       case 'approved':
       case 'active':
         return BorrowingStatus.active;
+      case 'return_requested':
+        return BorrowingStatus.returnRequested;
       case 'overdue':
         return BorrowingStatus.overdue;
       case 'returned':
@@ -94,11 +107,11 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     }
   }
 
-  Future<List<Borrowing>> _listByStatus(String status) async {
+  Future<List<Borrowing>> _listByStatuses(List<String> statuses) async {
     final rows = await _client
         .from('borrowings')
         .select(_selectWithJoins)
-        .eq('status', status)
+        .inFilter('status', statuses)
         .order('requested_at', ascending: false);
     return rows.map(_fromRow).toList(growable: false);
   }
@@ -112,13 +125,16 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   }
 
   @override
-  Future<List<Borrowing>> getActive() => _listByStatus('active');
+  Future<List<Borrowing>> getActive() =>
+      // 'approved' is a legacy status that maps to BorrowingStatus.active;
+      // include it so such rows don't vanish from every bucket.
+      _listByStatuses(['approved', 'active', 'return_requested']);
 
   @override
-  Future<List<Borrowing>> getOverdue() => _listByStatus('overdue');
+  Future<List<Borrowing>> getOverdue() => _listByStatuses(['overdue']);
 
   @override
-  Future<List<Borrowing>> getPending() => _listByStatus('pending');
+  Future<List<Borrowing>> getPending() => _listByStatuses(['pending']);
 
   @override
   Future<List<Borrowing>> getHistory() async {
@@ -169,10 +185,14 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   /// but synchronous (one query, one response). The controller's
   /// 15-second poll calls this so the admin's queue is never more than
   /// 15s stale even if a realtime event is dropped on the floor.
+  ///
+  /// Throws [NotSignedInException] when signed out instead of returning
+  /// an empty list, so "no borrowings yet" is distinguishable from
+  /// "the session expired".
   @override
   Future<List<Borrowing>> watchAllSnapshot() {
     if (_client.auth.currentUser == null) {
-      return Future.value(const <Borrowing>[]);
+      throw const NotSignedInException('watchAllSnapshot');
     }
     return _listAllWithJoins();
   }
@@ -199,6 +219,16 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     await _client.rpc(
       'transition_borrowing',
       params: {'p_borrowing_id': id, 'p_action': 'request_return'},
+    );
+  }
+
+  /// Admin-only: verify the physical return. This is the transition that
+  /// actually credits `equipment.available_count` (see migration 0014).
+  @override
+  Future<void> confirmReturn(String id) async {
+    await _client.rpc(
+      'transition_borrowing',
+      params: {'p_borrowing_id': id, 'p_action': 'confirm_return'},
     );
   }
 

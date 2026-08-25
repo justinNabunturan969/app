@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../student/models.dart';
+import '../auth_exceptions.dart';
 import '../notifications_repository.dart';
 
 /// Supabase-backed notifications feed. Each row is owned by a single
@@ -44,6 +45,9 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
 
   @override
   Future<List<AppNotification>> getAll() async {
+    if (_client.auth.currentUser == null) {
+      throw const NotSignedInException('getAll');
+    }
     final rows = await _client
         .from('notifications')
         .select()
@@ -75,7 +79,7 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   @override
   Future<void> markAllRead() async {
     final uid = _client.auth.currentUser?.id;
-    if (uid == null) return;
+    if (uid == null) throw const NotSignedInException('markAllRead');
     await _client
         .from('notifications')
         .update({'is_read': true})
@@ -86,7 +90,7 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   @override
   Future<void> clearAll() async {
     final uid = _client.auth.currentUser?.id;
-    if (uid == null) return;
+    if (uid == null) throw const NotSignedInException('clearAll');
     await _client.from('notifications').delete().eq('recipient_id', uid);
   }
 
@@ -101,7 +105,7 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
     // actually write are populated — recipient_id is set from the current
     // session so the row lands in the right inbox.
     final uid = _client.auth.currentUser?.id;
-    if (uid == null) return;
+    if (uid == null) throw const NotSignedInException('restore');
     await _client.from('notifications').insert({
       'recipient_id': uid,
       'type': _typeToString(n.type),

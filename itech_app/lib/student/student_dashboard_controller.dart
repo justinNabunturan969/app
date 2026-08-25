@@ -465,8 +465,10 @@ class StudentDashboardController extends ChangeNotifier {
   Future<void> _refreshBorrowingsQuietly() async {
     try {
       final all = await bundle.borrowings.watchAllSnapshot();
-      if (all.isEmpty && _pendingBorrowings.isEmpty &&
-          _activeBorrowings.isEmpty && _overdueBorrowings.isEmpty &&
+      if (all.isEmpty &&
+          _pendingBorrowings.isEmpty &&
+          _activeBorrowings.isEmpty &&
+          _overdueBorrowings.isEmpty &&
           _historyBorrowings.isEmpty) {
         // Don't clobber an empty initial state with an empty result
         // from a transient RLS / network failure mid-load.
@@ -569,10 +571,11 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
-  /// Marks the borrowing as returned and moves it from `activeBorrowings` or
-  /// `overdueBorrowings` to the top of `historyBorrowings` with the current
-  /// time as the return date. Writes to Supabase first, updates local state
-  /// only on success.
+  /// Student taps "return": moves the loan to the intermediate
+  /// `returnRequested` state. Inventory is NOT credited yet — an admin
+  /// must verify the physical hand-in via [confirmReturnBorrowing]
+  /// (migration 0014). The row stays visible in the active list with a
+  /// "return pending" badge until then.
   Future<bool> returnBorrowing(String id) async {
     try {
       await bundle.borrowings.returnBorrowing(id);
@@ -580,22 +583,72 @@ class StudentDashboardController extends ChangeNotifier {
       // what the DB now has. Cheaper than a full reload.
       final updated = await bundle.borrowings.getById(id);
       if (updated == null) return false;
-      _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
-      _overdueBorrowings = _overdueBorrowings.where((b) => b.id != id).toList();
-      _historyBorrowings = [updated, ..._historyBorrowings];
-      _log(
-        scope: ActivityScope.student,
-        icon: Icons.assignment_return_rounded,
-        tone: PupColors.mintGreen,
-        title: 'Returned: ${updated.equipmentName}',
-        subtitle: 'On time • Thank you!',
-      );
+      if (updated.status == BorrowingStatus.returned) {
+        // Mock bundle (or legacy backend): return is final immediately.
+        _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
+        _overdueBorrowings = _overdueBorrowings
+            .where((b) => b.id != id)
+            .toList();
+        _historyBorrowings = [updated, ..._historyBorrowings];
+        _log(
+          scope: ActivityScope.student,
+          icon: Icons.assignment_return_rounded,
+          tone: PupColors.mintGreen,
+          title: 'Returned: ${updated.equipmentName}',
+          subtitle: 'On time • Thank you!',
+        );
+      } else {
+        // Supabase bundle: awaiting admin verification. Keep it in the
+        // active bucket so the student sees its "awaiting verification"
+        // badge instead of thinking the item vanished.
+        _activeBorrowings = [
+          updated,
+          ..._activeBorrowings.where((b) => b.id != id),
+        ];
+        _overdueBorrowings = _overdueBorrowings
+            .where((b) => b.id != id)
+            .toList();
+        _log(
+          scope: ActivityScope.student,
+          icon: Icons.assignment_return_rounded,
+          tone: PupColors.cyberAmber,
+          title: 'Return requested: ${updated.equipmentName}',
+          subtitle: 'Awaiting admin verification',
+        );
+      }
       notifyListeners();
       return true;
     } catch (e) {
       // User-action errors are surfaced by the caller's own UI (e.g.
       // snackbars from the admin screens). Don't pollute the shell
       // banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
+      return false;
+    }
+  }
+
+  /// Admin verifies the physical return of a loan or a pending return
+  /// request. This is the transition that credits inventory on the
+  /// backend (migration 0014). Moves the borrowing into history with
+  /// status=returned.
+  Future<bool> confirmReturnBorrowing(String id) async {
+    try {
+      await bundle.borrowings.confirmReturn(id);
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return false;
+      _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
+      _overdueBorrowings = _overdueBorrowings.where((b) => b.id != id).toList();
+      _historyBorrowings = [updated, ..._historyBorrowings];
+      _log(
+        scope: ActivityScope.admin,
+        icon: Icons.verified_rounded,
+        tone: PupColors.mintGreen,
+        title: 'Return verified: ${updated.equipmentName}',
+        subtitle: '${updated.studentName} • ${updated.studentId}',
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
       debugPrint('action failed: $e');
       return false;
     }

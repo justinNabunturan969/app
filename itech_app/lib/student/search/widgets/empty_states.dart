@@ -14,8 +14,6 @@ class NoResultsState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     const popular = ['Multimeter', 'Wrench', 'Arduino', 'Oscilloscope'];
 
     return Padding(
@@ -41,59 +39,49 @@ class NoResultsState extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            decoration: glassDecoration(
-              context,
-              PupColors.cyberAmber,
-              borderRadius: 18,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Try searching for:',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: isDark
-                        ? theme.colorScheme.onSurface
-                        : PupColors.slateGray,
+                    color: PupColors.slateGray,
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
+                const Text(
                   '• Different keywords',
                   style: TextStyle(
-                    color: isDark
-                        ? theme.colorScheme.onSurfaceVariant
-                        : PupColors.ashGray,
+                    color: PupColors.ashGray,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                Text(
+                const Text(
                   '• Check spelling',
                   style: TextStyle(
-                    color: isDark
-                        ? theme.colorScheme.onSurfaceVariant
-                        : PupColors.ashGray,
+                    color: PupColors.ashGray,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                Text(
+                const Text(
                   '• Use shorter terms',
                   style: TextStyle(
-                    color: isDark
-                        ? theme.colorScheme.onSurfaceVariant
-                        : PupColors.ashGray,
+                    color: PupColors.ashGray,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text(
+                const Text(
                   'Popular Searches:',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: isDark
-                        ? theme.colorScheme.onSurface
-                        : PupColors.slateGray,
+                    color: PupColors.slateGray,
                   ),
                 ),
                 const SizedBox(height: 10),

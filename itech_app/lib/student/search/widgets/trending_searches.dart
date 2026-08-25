@@ -9,18 +9,6 @@ class TrendingSearches extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final titleColor = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
-    final borderColor = isDark
-        ? PupGlass.darkBorder(PupColors.cyberAmber)
-        : PupColors.ashGray.withValues(alpha: 0.3);
-    final textColor = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
-
     final chips = const <String>[
       'Multimeter',
       'Wrench Set',
@@ -40,7 +28,7 @@ class TrendingSearches extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 14,
-              color: titleColor,
+              color: PupColors.slateGray,
             ),
           ),
         ),
@@ -62,7 +50,9 @@ class TrendingSearches extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: borderColor),
+                      border: Border.all(
+                        color: PupColors.ashGray.withValues(alpha: 0.35),
+                      ),
                     ),
                     alignment: Alignment.center,
                     child: Text(
@@ -70,7 +60,7 @@ class TrendingSearches extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
-                        color: textColor,
+                        color: PupColors.slateGray,
                       ),
                     ),
                   ),

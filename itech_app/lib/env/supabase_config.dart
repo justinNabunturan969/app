@@ -3,50 +3,33 @@ import 'package:flutter/foundation.dart';
 /// Supabase project credentials. These come from your project's dashboard at
 /// https://supabase.com/dashboard/project/_/settings/api
 ///
-/// Two ways to provide them at build time:
+/// Credentials are **never inlined in source**. Provide them at build time:
 ///
-/// 1. **Local dev / native builds** — pass with `--dart-define` so they
-///    never get committed to source control. The `supabase.json` file in
-///    the repo root is loaded by `run.ps1` via `--dart-define-from-file`.
+/// 1. **Local dev / native builds** — pass with `--dart-define`, or use the
+///    git-ignored `supabase.local.json` loaded by `run.ps1` via
+///    `--dart-define-from-file`.
+/// 2. **Vercel / web deploy** — pass the same flags to `flutter build web`
+///    in your CI/deploy script (e.g. from environment variables / secrets).
 ///
-/// 2. **Vercel / web deploy** — values are inlined below as the
-///    `defaultValue` so a `flutter build web --release` works with no
-///    extra flags. The Supabase *anon* key is meant to be public (it's
-///    what ships in every browser request), so embedding it for a thesis
-///    demo is acceptable. If you ever rotate keys, update them here
-///    **and** in the Supabase dashboard, then rebuild.
+/// The Supabase *anon* key is designed to be public (it ships in every
+/// browser request) and RLS policies are what actually protect data — but
+/// keeping it out of source control still prevents key reuse across
+/// environments and makes rotation painless.
 ///
-/// To override the inlined values for a one-off build, pass the
-/// `--dart-define` flags explicitly — they take precedence over the
-/// defaults:
 /// ```bash
-/// flutter build web --release \
+/// flutter run \
 ///   --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
 ///   --dart-define=SUPABASE_ANON_KEY=eyJhbGciOi...
 /// ```
 class SupabaseConfig {
   const SupabaseConfig._();
 
-  // ── Inlined defaults for the deployed demo build ────────────────────
-  // These match the project in `supabase.json`. The anon key is a public
-  // key (its role is "anon"), so it's safe to ship in client code — RLS
-  // policies on the database are what keep your data protected.
-  static const String _defaultUrl = 'https://obwdgxcfxxixnuqsjfpu.supabase.co';
-  static const String _defaultAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
-      'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9id2RneGNmeHhpeG51cXNqZnB1Iiwi'
-      'cm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzkwMjYsImV4cCI6MjEwMTIxNTAyNn0.'
-      'Nb1VQlS13rmOlbziFSRzVJR80S069yZtb4G-1VqM3WI';
+  // No defaults on purpose. A missing flag fails fast and loudly at
+  // startup (see [assertConfigured]) instead of silently pointing a dev
+  // build at a production project.
+  static const String url = String.fromEnvironment('SUPABASE_URL');
 
-  static const String url = String.fromEnvironment(
-    'SUPABASE_URL',
-    defaultValue: _defaultUrl,
-  );
-
-  static const String anonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: _defaultAnonKey,
-  );
+  static const String anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
   /// Where Supabase returns the user after they open a password-reset email.
   ///

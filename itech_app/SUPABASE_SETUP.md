@@ -29,19 +29,27 @@ of this file and run the complete script again.
 
 ### Existing projects: apply later migrations
 
-If you had already run `0001_initial_schema.sql` before adding live
-notifications and student return requests, also run
-`supabase/migrations/0002_live_notifications_and_return_requests.sql` in the
-SQL Editor. It upgrades the notification trigger without deleting data.
+If you had already run `0001_initial_schema.sql` before later features were
+added, run the remaining migrations in order in the SQL Editor:
 
-Then run `supabase/migrations/0003_security_hardening_and_audit.sql`. This is
-required before using the current app build: it protects profile roles, moves
-borrowing approval/return actions into secure database functions, prevents
-duplicate open requests, and adds an admin-only audit log.
+| Migration | What it adds |
+|---|---|
+| `0002_live_notifications_and_return_requests.sql` | Upgrades the notification trigger (admin return-request alerts). |
+| `0003_security_hardening_and_audit.sql` | **Required.** Protects profile roles, moves borrowing actions into secure RPCs, prevents duplicate open requests, adds the admin audit log. |
+| `0004_return_existing_open_borrowing.sql` | Makes repeated request taps safe (returns the existing open request instead of erroring). |
+| `0005_borrowing_quantities.sql` | **Required.** Adds `quantity` support and replaces `request_borrowing` / `transition_borrowing`. |
+| `0006_live_session_lifecycle.sql` | Session lease lifecycle + `session_history` audit table. |
+| `0007_active_session_upsert.sql` | Keeps `logged_in_at` stable across heartbeats; allows session resurrection. |
+| `0008_active_sessions_realtime.sql` | Puts `active_sessions` on the realtime publication for the admin Live tab. |
+| `0009_loosen_session_expire.sql` | Widens the stale-session sweep from 2 to 5 minutes. |
+| `0010_student_session_history_rls.sql` | No-op tombstone (student self-read intentionally not granted). |
+| `0011_production_security_and_api_grants.sql` | **Required.** Explicit Data API grants, profile identity protection, revokes the student-ID→email lookup helper. |
+| `0012_drop_dead_functions_and_finish_grants.sql` | Drops unused functions (`touch_active_session`, `auth_email_for_student_id`) and finishes RPC grant hardening. |
+| `0013_session_kick_cooldown.sql` | Prevents a force-logged-out user's heartbeat from resurrecting their `active_sessions` row. |
 
-Finally, run `supabase/migrations/0004_return_existing_open_borrowing.sql`.
-It preserves the duplicate-request protection while safely returning the
-existing open request when an older client or a repeated tap submits again.
+A fresh project only needs `0001_initial_schema.sql` followed by
+`0003`, `0005`, `0011`, `0012`, and `0013`; running every file in order is
+also safe — they are idempotent.
 
 To verify it worked, run this in the SQL editor:
 
@@ -123,8 +131,23 @@ For VS Code: open `.vscode/launch.json` (or create it) and add the
 
 For Android Studio: **Run → Edit Configurations → Flutter → Additional args**.
 
-If you forget the flags, the app will throw a clear `StateError` at startup
-telling you exactly which flag is missing.
+Credentials are **never committed to source**. The git-ignored
+`supabase.json` in the project root is loaded automatically by `run.ps1`
+and `.vscode/launch.json` via `--dart-define-from-file`. Create it once:
+
+```json
+{
+  "SUPABASE_URL": "https://YOUR_PROJECT.supabase.co",
+  "SUPABASE_ANON_KEY": "eyJhbGciOi..."
+}
+```
+
+For web deploys (Vercel), set `SUPABASE_URL` and `SUPABASE_ANON_KEY` as
+environment variables in the Vercel project settings — `build.sh` forwards
+them to the compiler.
+
+If the flags are missing, the app shows a clear in-app "configuration
+required" screen instead of silently talking to the wrong project.
 
 ---
 

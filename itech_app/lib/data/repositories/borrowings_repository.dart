@@ -43,6 +43,11 @@ abstract class BorrowingsRepository {
 
   Future<void> returnBorrowing(String id);
 
+  /// Admin: verify the physical return of a loan (or a pending return
+  /// request). This is the transition that credits inventory on the
+  /// Supabase backend (migration 0014).
+  Future<void> confirmReturn(String id);
+
   // ── Admin actions ───────────────────────────────────────────────────
   Future<void> approve(String id);
   Future<void> reject(String id);
@@ -92,12 +97,7 @@ class MockBorrowingsRepository implements BorrowingsRepository {
 
   @override
   Future<List<Borrowing>> watchAllSnapshot() async {
-    return [
-      ..._active,
-      ..._overdue,
-      ..._pending,
-      ..._history,
-    ];
+    return [..._active, ..._overdue, ..._pending, ..._history];
   }
 
   // ── Student: create a new pending request ─────────────────────────
@@ -160,6 +160,15 @@ class MockBorrowingsRepository implements BorrowingsRepository {
         ),
       );
     }
+  }
+
+  // ── Admin: verify a physical return ────────────────────────────────
+  @override
+  Future<void> confirmReturn(String id) async {
+    // The mock treats the student's return tap as final (no verification
+    // step offline), so this only needs to catch loans still sitting in
+    // the active/overdue lists.
+    await returnBorrowing(id);
   }
 
   // ── Admin: approve a pending request ───────────────────────────────

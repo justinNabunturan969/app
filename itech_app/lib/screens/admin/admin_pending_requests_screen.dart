@@ -10,10 +10,11 @@ import '../../theme/design_tokens.dart';
 /// Admin Pending Requests — the equipment office's review queue.
 ///
 /// Shows every borrowing whose status is `pending` (submitted by a student
-/// but not yet approved/rejected). One-tap approve moves it to
-/// `activeBorrowings`; reject moves it to `historyBorrowings` as
-/// `rejected`. All four admin list actions (approve, reject, the two
-/// confirm dialogs) flow through the controller.
+/// but not yet approved/rejected), plus loans in the `return_requested`
+/// state waiting for an admin to verify the physical hand-in (migration
+/// 0014). One-tap approve moves it to `activeBorrowings`; reject moves it
+/// to `historyBorrowings` as `rejected`; verifying a return credits the
+/// inventory. All admin list actions flow through the controller.
 class AdminPendingRequestsScreen extends StatefulWidget {
   const AdminPendingRequestsScreen({super.key});
 
@@ -24,8 +25,8 @@ class AdminPendingRequestsScreen extends StatefulWidget {
 
 class _AdminPendingRequestsScreenState
     extends State<AdminPendingRequestsScreen> {
-  int _filter = 0; // 0=All, 1=Pending, 2=Approved, 3=Rejected
-  static const _filters = ['All', 'Pending', 'Approved', 'Rejected'];
+  int _filter = 0; // 0=All, 1=Pending, 2=Approved, 3=Rejected, 4=Returns
+  static const _filters = ['All', 'Pending', 'Approved', 'Rejected', 'Returns'];
 
   List<Borrowing> _apply(List<Borrowing> all) {
     switch (_filter) {
@@ -35,6 +36,10 @@ class _AdminPendingRequestsScreenState
         return all.where((b) => b.status == BorrowingStatus.approved).toList();
       case 3:
         return all.where((b) => b.status == BorrowingStatus.rejected).toList();
+      case 4:
+        return all
+            .where((b) => b.status == BorrowingStatus.returnRequested)
+            .toList();
       default:
         return all;
     }
@@ -53,20 +58,28 @@ class _AdminPendingRequestsScreenState
 
     return Consumer<StudentDashboardController>(
       builder: (context, ctrl, _) {
-        // The full queue = pending requests + recent approved/rejected
-        // decisions (drawn from history). Sorted by most recent.
+        // The full queue = pending requests + return requests awaiting
+        // verification + recent approved/rejected decisions (drawn from
+        // history). Sorted by most recent.
         final all =
             <Borrowing>[
               ...ctrl.pendingBorrowings,
+              ...ctrl.activeBorrowings.where(
+                (b) => b.status == BorrowingStatus.returnRequested,
+              ),
               ...ctrl.historyBorrowings.where(
                 (b) =>
                     b.status == BorrowingStatus.approved ||
                     b.status == BorrowingStatus.rejected,
               ),
             ]..sort((a, b) {
-              final aPending = a.status == BorrowingStatus.pending;
-              final bPending = b.status == BorrowingStatus.pending;
-              if (aPending != bPending) return aPending ? -1 : 1;
+              int rank(Borrowing x) => switch (x.status) {
+                BorrowingStatus.pending => 0,
+                BorrowingStatus.returnRequested => 1,
+                _ => 2,
+              };
+              final r = rank(a).compareTo(rank(b));
+              if (r != 0) return r;
               return b.borrowDate.compareTo(a.borrowDate);
             });
 
@@ -134,81 +147,86 @@ class _AdminPendingRequestsScreenState
                               const ThemeMenuButton(),
                             ],
                           ),
-                        const SizedBox(height: 2),
-                        Text(
-                          pendingCount == 0
-                              ? 'No requests waiting for review.'
-                              : '$pendingCount ${pendingCount == 1 ? 'request' : 'requests'} waiting for review.',
-                          style: TextStyle(
-                            color: subtleText,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (pendingCount > 0) ...[
-                          const SizedBox(height: 12),
-                          _UrgentReviewBanner(
-                            count: pendingCount,
-                            onReviewNow: () => setState(() => _filter = 1),
-                          ),
-                        ],
-                        const SizedBox(height: 14),
-                        _FilterChipsRow(
-                          selected: _filter,
-                          filters: _filters,
-                          onSelected: (i) => setState(() => _filter = i),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ),
-                  ),
-                ),
-                if (filtered.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 48),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(
-                              _emptyIconFor(_filter),
-                              size: 48,
+                          const SizedBox(height: 2),
+                          Text(
+                            pendingCount == 0
+                                ? 'No requests waiting for review.'
+                                : '$pendingCount ${pendingCount == 1 ? 'request' : 'requests'} waiting for review.',
+                            style: TextStyle(
                               color: subtleText,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _emptyLabelFor(_filter),
-                              style: TextStyle(
-                                color: subtleText,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          ),
+                          if (pendingCount > 0) ...[
+                            const SizedBox(height: 12),
+                            _UrgentReviewBanner(
+                              count: pendingCount,
+                              onReviewNow: () => setState(() => _filter = 1),
                             ),
                           ],
-                        ),
+                          const SizedBox(height: 14),
+                          _FilterChipsRow(
+                            selected: _filter,
+                            filters: _filters,
+                            onSelected: (i) => setState(() => _filter = i),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                       ),
                     ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    sliver: SliverList.separated(
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, i) {
-                        final b = filtered[i];
-                        return _RequestCard(
-                          borrowing: b,
-                          onApprove: b.status == BorrowingStatus.pending
-                              ? () => _confirmApprove(context, ctrl, b)
-                              : null,
-                          onReject: b.status == BorrowingStatus.pending
-                              ? () => _confirmReject(context, ctrl, b)
-                              : null,
-                        );
-                      },
-                    ),
                   ),
-              ],
+                  if (filtered.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                _emptyIconFor(_filter),
+                                size: 48,
+                                color: subtleText,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _emptyLabelFor(_filter),
+                                style: TextStyle(
+                                  color: subtleText,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      sliver: SliverList.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, i) {
+                          final b = filtered[i];
+                          final isReturnRequest =
+                              b.status == BorrowingStatus.returnRequested;
+                          return _RequestCard(
+                            borrowing: b,
+                            onApprove: b.status == BorrowingStatus.pending
+                                ? () => _confirmApprove(context, ctrl, b)
+                                : null,
+                            onReject: b.status == BorrowingStatus.pending
+                                ? () => _confirmReject(context, ctrl, b)
+                                : null,
+                            onVerifyReturn: isReturnRequest
+                                ? () => _confirmVerifyReturn(context, ctrl, b)
+                                : null,
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -223,6 +241,8 @@ class _AdminPendingRequestsScreenState
         return Icons.check_circle_outline_rounded;
       case 3:
         return Icons.cancel_outlined;
+      case 4:
+        return Icons.assignment_return_outlined;
       default:
         return Icons.inbox_rounded;
     }
@@ -236,9 +256,60 @@ class _AdminPendingRequestsScreenState
         return 'No approved requests yet';
       case 3:
         return 'No rejected requests';
+      case 4:
+        return 'No returns waiting for verification';
       default:
         return 'Nothing in the queue';
     }
+  }
+
+  /// Admin confirms the physical hand-in of a `return_requested` loan.
+  /// This is the transition that credits equipment availability
+  /// (migration 0014).
+  Future<void> _confirmVerifyReturn(
+    BuildContext context,
+    StudentDashboardController ctrl,
+    Borrowing b,
+  ) async {
+    HapticFeedback.lightImpact();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Verify return?'),
+        content: Text(
+          "Confirm that ${b.studentName} has physically returned "
+          '${b.equipmentName}? The item will be marked as available again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.mintGreen,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Verify Return'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final verified = await ctrl.confirmReturnBorrowing(b.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          verified
+              ? 'Return verified — ${b.equipmentName} is available again.'
+              : 'Could not verify this return. Please refresh and try again.',
+        ),
+        backgroundColor: verified ? null : PupColors.signalRed,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _confirmApprove(
@@ -454,11 +525,13 @@ class _RequestCard extends StatelessWidget {
     required this.borrowing,
     required this.onApprove,
     required this.onReject,
+    this.onVerifyReturn,
   });
 
   final Borrowing borrowing;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onVerifyReturn;
 
   ({Color tone, IconData icon, String label}) get _statusStyle {
     switch (borrowing.status) {
@@ -467,6 +540,12 @@ class _RequestCard extends StatelessWidget {
           tone: PupColors.cyberAmber,
           icon: Icons.hourglass_top_rounded,
           label: 'Pending',
+        );
+      case BorrowingStatus.returnRequested:
+        return (
+          tone: PupColors.techCyan,
+          icon: Icons.assignment_return_rounded,
+          label: 'Return pending',
         );
       case BorrowingStatus.approved:
         return (
@@ -645,6 +724,30 @@ class _RequestCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+
+          // Verify-return action (for loans awaiting physical hand-in).
+          if (onVerifyReturn != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onVerifyReturn,
+                icon: const Icon(Icons.verified_rounded, size: 18),
+                label: const Text(
+                  'Verify Return',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: PupColors.mintGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
             ),
           ],
         ],

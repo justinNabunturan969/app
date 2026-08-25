@@ -1,7 +1,20 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show IconData, Color;
 
-enum BorrowingStatus { pending, active, returned, overdue, rejected, approved }
+/// Lifecycle of a borrowing request.
+///
+/// `returnRequested` is the intermediate state between a student tapping
+/// "return" and an admin verifying the physical hand-in (migration 0014).
+/// Inventory is only credited when the status reaches [returned].
+enum BorrowingStatus {
+  pending,
+  active,
+  returnRequested,
+  returned,
+  overdue,
+  rejected,
+  approved,
+}
 
 @immutable
 class Equipment {
