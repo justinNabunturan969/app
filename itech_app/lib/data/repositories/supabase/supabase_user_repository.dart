@@ -306,6 +306,26 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
+  /// Durable kick flag. The notice row survives until the device consumes
+  /// it, so this detects an admin force-logout no matter how much later
+  /// the app next heartbeats — closing the "restart after the cooldown
+  /// expired and the session resurrects" loophole.
+  @override
+  Future<bool> hasForceLogoutNotice() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return false;
+    try {
+      final row = await _client
+          .from('force_logout_notices')
+          .select('profile_id')
+          .eq('profile_id', user.id)
+          .maybeSingle();
+      return row != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Realtime feed of the admin-visible `session_history` rows. Every
   /// recorded session (sign-out, force-logout, expiry sweep) re-emits a
   /// full snapshot so the History tab updates without a manual refresh.

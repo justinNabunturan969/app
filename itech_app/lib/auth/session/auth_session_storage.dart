@@ -48,6 +48,12 @@ class AuthSessionStorage {
   static const _rememberKey = 'auth_remember';
   static const _lastLoginKey = 'auth_last_login';
 
+  /// Persists the administrator's force-logout reason across restarts so
+  /// the login screen can show the REAL reason even if the device was
+  /// restarted between the kick and the next launch. One-shot: the login
+  /// screen removes it after displaying.
+  static const kickReasonKey = 'auth_kick_reason';
+
   static const _studentIdKey = 'auth_student_id';
   static const _studentEmailKey = 'auth_student_email';
   static const _studentUsernameKey = 'auth_student_username';

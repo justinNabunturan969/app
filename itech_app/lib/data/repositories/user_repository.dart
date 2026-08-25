@@ -76,6 +76,12 @@ abstract class UserRepository {
   /// active, so "upsert succeeded but row absent" means "we were kicked".
   Future<bool> ownSessionExists();
 
+  /// True when a force-logout notice is waiting for the signed-in user.
+  /// Unlike the `active_sessions` row check, the notice PERSISTS until
+  /// the device consumes it, so a kick is detected no matter how much
+  /// later (minutes, hours, days) the app next heartbeats.
+  Future<bool> hasForceLogoutNotice();
+
   /// Emits the admin-visible `session_history` feed whenever any session
   /// is recorded (sign-out, force-logout, expiry sweep). The initial
   /// emission is a complete snapshot. Admin-only via RLS.
@@ -171,6 +177,12 @@ class MockUserRepository implements UserRepository {
   Future<bool> ownSessionExists() async {
     // Offline demo: presence is always assumed.
     return true;
+  }
+
+  @override
+  Future<bool> hasForceLogoutNotice() async {
+    // Offline demo: no kick notices exist.
+    return false;
   }
 
   @override

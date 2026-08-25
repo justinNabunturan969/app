@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/session_lifecycle_guard.dart';
@@ -17,12 +18,6 @@ late final AuthSessionStorage authSessionStorage;
 late final ThemeController themeController;
 late final LanguageController languageController;
 late final RepositoryBundle repositoryBundle;
-
-/// One-shot reason shown on the login screen after an administrator
-/// force-logs the current device out. Fetched while the session is
-/// still alive (the notice RPC resolves the caller from their token),
-/// consumed by [StudentLoginScreen], then cleared.
-String? forcedLogoutNotice;
 
 /// Convenience accessor used everywhere in the app code.
 SupabaseClient get supabase => Supabase.instance.client;
@@ -83,18 +78,27 @@ Future<void> main() async {
         userRepository: repositoryBundle.user,
         onForcedLogout: () async {
           // An administrator terminated this session (Login History or
-          // Live tab → force logout). Grab the reason notice while the
-          // token still works, wipe the local session, and land the
-          // user on the student login page where the notice is shown.
+          // Live tab → force logout). Grab the reason while the token
+          // still works and PERSIST it — the login screen shows it after
+          // the launch animation, surviving any restart in between.
+          var reason = 'Your session was ended by an administrator.';
           try {
-            forcedLogoutNotice = await repositoryBundle.user
+            final fetched = await repositoryBundle.user
                 .consumeForceLogoutNotice();
+            if (fetched != null && fetched.isNotEmpty) reason = fetched;
           } catch (_) {
-            // Best effort — the login screen falls back to a default
-            // message when the notice can't be fetched.
+            // Best effort — the default wording still explains the kick.
           }
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+            AuthSessionStorage.kickReasonKey,
+            reason,
+          );
           await authSessionStorage.clearSession();
-          appRouter.router.go('/student/login?kicked=1');
+          // Replay the exact cold-start animation (wrench rise → glide →
+          // wordmark), then land on the student login page where the
+          // reason banner is waiting.
+          appRouter.router.go('/launching?kicked=1');
         },
         child: RouterApp(
           router: appRouter.router,

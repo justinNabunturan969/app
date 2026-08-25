@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
 import '../../env/supabase_config.dart';
 import '../../theme/design_tokens.dart';
+import '../session/auth_session_storage.dart';
 import '../validators/auth_validators.dart';
 import '../widgets/form_text_field.dart';
 import '../widgets/login_hero.dart';
@@ -53,12 +57,21 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     final kicked =
         GoRouterState.of(context).uri.queryParameters['kicked'] == '1';
     if (kicked) {
-      setState(() {
-        _kickMessage =
-            forcedLogoutNotice ?? 'Your session was ended by an administrator.';
-        forcedLogoutNotice = null;
-      });
+      unawaited(_loadKickMessage());
     }
+  }
+
+  /// The reason was persisted by the forced-logout handler BEFORE the
+  /// session was dropped, so it survives any number of restarts. One-shot:
+  /// removed from prefs once displayed.
+  Future<void> _loadKickMessage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final reason =
+        prefs.getString(AuthSessionStorage.kickReasonKey) ??
+        'Your session was ended by an administrator.';
+    await prefs.remove(AuthSessionStorage.kickReasonKey);
+    if (!mounted) return;
+    setState(() => _kickMessage = reason);
   }
 
   Future<void> _loadSavedCredentials() async {

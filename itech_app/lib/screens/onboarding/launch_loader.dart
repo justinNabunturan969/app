@@ -52,6 +52,16 @@ class _LaunchLoaderState extends State<LaunchLoader>
     await Future<void>.delayed(const Duration(milliseconds: 240));
     if (!mounted) return;
 
+    // Forced-logout replay: an administrator kicked this device, so the
+    // "reload" lands on the login screen where the admin's reason is
+    // shown (read from prefs by StudentLoginScreen).
+    final kicked =
+        GoRouterState.of(context).uri.queryParameters['kicked'] == '1';
+    if (kicked) {
+      context.go('/student/login?kicked=1');
+      return;
+    }
+
     final loggedIn = await authSessionStorage.isLoggedIn();
     if (!mounted) return;
     if (!loggedIn) {
