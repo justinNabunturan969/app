@@ -212,6 +212,18 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   Future<void> _markOnline() async {
     try {
       await widget.userRepository.markOwnSessionActive();
+      // Heartbeat-time kick verification. `start_active_session` is a
+      // silent no-op while a force-logout cooldown is active, so a
+      // successful upsert followed by an absent row means an admin
+      // kicked us and the realtime presence event was missed (device
+      // offline at kick time). This closes that loophole without a
+      // hard refresh.
+      if (!_kickHandled &&
+          Supabase.instance.client.auth.currentSession != null &&
+          !await widget.userRepository.ownSessionExists()) {
+        _kickHandled = true;
+        unawaited(_handleForcedLogout());
+      }
     } catch (_) {
       // Best effort.
     }

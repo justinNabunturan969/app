@@ -69,6 +69,18 @@ abstract class UserRepository {
   /// immediate local sign-out. Emits nothing when signed out.
   Stream<bool> watchOwnSessionPresence();
 
+  /// One-shot check: does the signed-in user currently have a row in
+  /// `active_sessions`? Used by the heartbeat to detect a force-logout
+  /// that a missed realtime event never surfaced — `start_active_session`
+  /// silently refuses to re-create the row while the kick cooldown is
+  /// active, so "upsert succeeded but row absent" means "we were kicked".
+  Future<bool> ownSessionExists();
+
+  /// Emits the admin-visible `session_history` feed whenever any session
+  /// is recorded (sign-out, force-logout, expiry sweep). The initial
+  /// emission is a complete snapshot. Admin-only via RLS.
+  Stream<List<LoginHistoryEntry>> watchLoginHistory({int limit});
+
   /// Best-effort cleanup of the current user's session row. Called on
   /// sign-out (and on app pause / detach) so the Live tab reflects
   /// reality instead of accumulating every account that's ever signed
@@ -153,6 +165,18 @@ class MockUserRepository implements UserRepository {
     // Offline demo: presence never disappears on its own, so there is
     // nothing to watch.
     return const Stream<bool>.empty();
+  }
+
+  @override
+  Future<bool> ownSessionExists() async {
+    // Offline demo: presence is always assumed.
+    return true;
+  }
+
+  @override
+  Stream<List<LoginHistoryEntry>> watchLoginHistory({int limit = 100}) {
+    // Offline demo: the seed list is static.
+    return const Stream.empty();
   }
 
   @override

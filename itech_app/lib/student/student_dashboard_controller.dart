@@ -392,6 +392,8 @@ class StudentDashboardController extends ChangeNotifier {
   List<LoginHistoryEntry> _loginHistory = const [];
   List<LoginHistoryEntry> get loginHistory => List.unmodifiable(_loginHistory);
 
+  StreamSubscription<List<LoginHistoryEntry>>? _loginHistorySubscription;
+
   bool _loginHistoryLoading = false;
   bool get loginHistoryLoading => _loginHistoryLoading;
 
@@ -408,8 +410,11 @@ class StudentDashboardController extends ChangeNotifier {
 
   /// Pull every past session the current admin is allowed to see.
   /// `limit` is forwarded to the repository (defaults to 100) so the
-  /// admin view can paginate if it ever needs to.
+  /// admin view can paginate if it ever needs to. Also arms the realtime
+  /// subscription on first call, so newly recorded sessions (sign-out,
+  /// force-logout, expiry) appear without a manual refresh.
   Future<void> loadLoginHistory({int limit = 100}) async {
+    _startLoginHistorySubscription();
     _loginHistoryLoading = true;
     _loginHistoryError = null;
     notifyListeners();
@@ -422,6 +427,23 @@ class StudentDashboardController extends ChangeNotifier {
       _loginHistoryLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Keeps Admin > History synchronized. Supabase emits an initial
+  /// snapshot and every insert into `session_history` (sign-out,
+  /// force-logout, expiry sweep), so recorded sessions appear live.
+  void _startLoginHistorySubscription() {
+    if (_loginHistorySubscription != null) return;
+    _loginHistorySubscription = bundle.user.watchLoginHistory().listen(
+      (entries) {
+        _loginHistory = entries;
+        _loginHistoryError = null;
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Login-history realtime subscription failed: $error');
+      },
+    );
   }
 
   // ── Load (initial + pull-to-refresh) ───────────────────────────────────
@@ -1005,6 +1027,7 @@ class StudentDashboardController extends ChangeNotifier {
     _notificationsSubscription?.cancel();
     _borrowingsSubscription?.cancel();
     _activeSessionsSubscription?.cancel();
+    _loginHistorySubscription?.cancel();
     super.dispose();
   }
 }

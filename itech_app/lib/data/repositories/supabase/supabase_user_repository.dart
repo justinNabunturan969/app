@@ -284,6 +284,40 @@ class SupabaseUserRepository implements UserRepository {
         .map((rows) => rows.isNotEmpty);
   }
 
+  /// One-shot presence check for the heartbeat path: `start_active_session`
+  /// is a silent no-op while a force-logout cooldown is active, so a
+  /// successful upsert followed by an absent row means the account was
+  /// kicked and the realtime event was missed.
+  @override
+  Future<bool> ownSessionExists() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return true;
+    try {
+      final row = await _client
+          .from('active_sessions')
+          .select('profile_id')
+          .eq('profile_id', user.id)
+          .maybeSingle();
+      return row != null;
+    } catch (_) {
+      // Network/RLS hiccup — assume present so a flaky connection can
+      // never sign the user out spuriously.
+      return true;
+    }
+  }
+
+  /// Realtime feed of the admin-visible `session_history` rows. Every
+  /// recorded session (sign-out, force-logout, expiry sweep) re-emits a
+  /// full snapshot so the History tab updates without a manual refresh.
+  @override
+  Stream<List<LoginHistoryEntry>> watchLoginHistory({int limit = 100}) {
+    if (_client.auth.currentUser == null) return const Stream.empty();
+    return _client
+        .from('session_history')
+        .stream(primaryKey: ['id'])
+        .asyncMap((_) => getLoginHistory(limit: limit));
+  }
+
   /// Admin-only audit log: every row in `session_history` joined with
   /// the matching `profiles` row. RLS in migration 0006 already gates
   /// the read to admins (`session_history_admin_read`).

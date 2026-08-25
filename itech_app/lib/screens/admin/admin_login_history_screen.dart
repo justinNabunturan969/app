@@ -33,6 +33,8 @@ class AdminLoginHistoryScreen extends StatefulWidget {
 }
 
 class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
+  bool _manualRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +48,22 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
         ctrl.loadLoginHistory();
       }
     });
+  }
+
+  /// Manual fallback for when the realtime channel is flaky (bad
+  /// network, throttled tab): re-pull both the live presence feed and
+  /// the recorded history from the server.
+  Future<void> _manualRefresh() async {
+    if (_manualRefreshing) return;
+    setState(() => _manualRefreshing = true);
+    final ctrl = context.read<StudentDashboardController>();
+    await Future.wait([
+      ctrl.loadLoginHistory(),
+      ctrl.loadActiveSessions(),
+      Future<void>.delayed(const Duration(milliseconds: 350)),
+    ]);
+    if (!mounted) return;
+    setState(() => _manualRefreshing = false);
   }
 
   @override
@@ -123,6 +141,11 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                                 ),
                               ),
                               const _HistoryBadge(),
+                              const SizedBox(width: 8),
+                              _RefreshButton(
+                                busy: _manualRefreshing,
+                                onPressed: _manualRefresh,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -325,39 +348,50 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
     );
   }
 
-  /// Confirmation dialog for the force-logout security action. Returns
-  /// the (possibly empty) reason to show the kicked user, or null when
-  /// the admin cancelled.
+  /// Confirmation dialog for the force-logout security action. The
+  /// reason is MANDATORY — the kicked user sees it on their login
+  /// screen. Returns the reason text, or null when the admin cancelled.
   Future<String?> _confirmKick(BuildContext context, String displayName) async {
     final reasonController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
     try {
       final approved = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text('Force logout $displayName?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Their active session ends immediately and their device '
-                'is returned to the login screen. The action is recorded '
-                'in Login History as "Force logout".',
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: reasonController,
-                maxLines: 2,
-                maxLength: 200,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Reason (shown to the user)',
-                  hintText: 'e.g., ID not found in PUP student records',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Their active session ends immediately and their device '
+                  'is returned to the login screen. The action is recorded '
+                  'in Login History as "Force logout".',
                 ),
-              ),
-            ],
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: reasonController,
+                  maxLines: 2,
+                  maxLength: 200,
+                  textCapitalization: TextCapitalization.sentences,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'A reason is required — the user will see it '
+                          'on their login screen.';
+                    }
+                    return null;
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (required, shown to the user)',
+                    hintText: 'e.g., ID not found in PUP student records',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -369,7 +403,10 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                 backgroundColor: PupColors.signalRed,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () => Navigator.of(ctx).pop(true),
+              onPressed: () {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.of(ctx).pop(true);
+              },
               icon: const Icon(Icons.logout_rounded, size: 18),
               label: const Text('Force logout'),
             ),
@@ -449,6 +486,36 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
 // ─────────────────────────────────────────────────────────────────────────
 // Pill badge in the header — marks the screen as an audit log.
 // ─────────────────────────────────────────────────────────────────────────
+
+/// Manual refresh fallback for the header. Realtime keeps the tab
+/// up to date; this covers flaky networks and throttled tabs.
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: IconButton.outlined(
+        onPressed: busy ? null : onPressed,
+        icon: busy
+            ? const SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : const Icon(Icons.refresh_rounded, size: 19),
+        tooltip: 'Refresh now',
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+}
 
 class _HistoryBadge extends StatelessWidget {
   const _HistoryBadge();
