@@ -101,6 +101,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   /// wording (which can hint at user enumeration).
   String _friendlyAuthError(Object error) {
     final raw = error.toString().toLowerCase();
+    if (raw.contains('student-id sign-in is unavailable')) {
+      return 'Student-ID sign-in is unavailable right now. '
+          'Sign in with your PUP email instead.';
+    }
     if (raw.contains('invalid login credentials') ||
         raw.contains('invalid_grant')) {
       return 'Wrong student ID or password.';

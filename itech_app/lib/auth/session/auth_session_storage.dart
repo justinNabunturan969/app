@@ -385,10 +385,27 @@ class AuthSessionStorage {
     final trimmed = identifier.trim();
     if (trimmed.contains('@')) return trimmed.toLowerCase();
 
-    final resolved = await _supabase.rpc(
-      'sign_in_identifier',
-      params: {'p_identifier': trimmed, 'p_password': password},
-    );
+    final String? resolved;
+    try {
+      resolved = await _supabase.rpc(
+        'sign_in_identifier',
+        params: {'p_identifier': trimmed, 'p_password': password},
+      );
+    } on PostgrestException catch (e) {
+      // PGRST202 = "could not find the function" — the server deployment
+      // is missing migration 0015. Give the student a working fallback
+      // (email sign-in) instead of a generic "not recognized".
+      if (e.code == 'PGRST202' ||
+          e.message.toLowerCase().contains('could not find the function') ||
+          e.message.toLowerCase().contains('sign_in_identifier')) {
+        debugPrint('sign_in_identifier RPC missing — run migration 0015.');
+        throw const AuthException(
+          'Student-ID sign-in is unavailable right now — '
+          'please sign in with your PUP email instead.',
+        );
+      }
+      rethrow;
+    }
     final email = resolved is String ? resolved.trim().toLowerCase() : '';
     if (email.isEmpty || !email.contains('@')) {
       throw const AuthException('Invalid login credentials');
