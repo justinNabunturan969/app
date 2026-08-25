@@ -89,15 +89,21 @@ Future<void> main() async {
           } catch (_) {
             // Best effort — the default wording still explains the kick.
           }
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            AuthSessionStorage.kickReasonKey,
-            reason,
-          );
-          await authSessionStorage.clearSession();
-          // Replay the exact cold-start animation (wrench rise → glide →
-          // wordmark), then land on the student login page where the
-          // reason banner is waiting.
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(AuthSessionStorage.kickReasonKey, reason);
+          } catch (_) {
+            // Best effort.
+          }
+          try {
+            await authSessionStorage.clearSession();
+          } catch (_) {
+            // Best effort.
+          }
+          // ALWAYS navigate — even if a step above failed, the device
+          // must leave the shell and replay the launch animation into
+          // the login page. Skipping this left users stranded on a
+          // signed-out shell with NotSignedInException banners.
           appRouter.router.go('/launching?kicked=1');
         },
         child: RouterApp(

@@ -38,10 +38,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   DateTime? _lastLogin;
 
   /// Set when the app was returned here by an administrator force
-  /// logout (`/student/login?kicked=1`). Holds the reason the admin
-  /// provided, or a default wording when none was given.
+  /// logout (`kicked=1`). Holds the reason the admin provided, or a
+  /// default wording when none was given. Persists across refreshes —
+  /// it is only cleared once the user actually signs in again.
   String? _kickMessage;
-  bool _kickChecked = false;
+  bool _kickLoading = false;
 
   @override
   void initState() {
@@ -52,24 +53,26 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_kickChecked) return;
-    _kickChecked = true;
+    // Re-checked on every dependency change: the kick can navigate here
+    // while the screen is already open (same route, new query param), so
+    // a one-shot flag would miss it.
     final kicked =
         GoRouterState.of(context).uri.queryParameters['kicked'] == '1';
-    if (kicked) {
+    if (kicked && _kickMessage == null && !_kickLoading) {
+      _kickLoading = true;
       unawaited(_loadKickMessage());
     }
   }
 
   /// The reason was persisted by the forced-logout handler BEFORE the
-  /// session was dropped, so it survives any number of restarts. One-shot:
-  /// removed from prefs once displayed.
+  /// session was dropped, so it survives any number of restarts. It is
+  /// deliberately KEPT here (not consumed) so a refresh never blanks the
+  /// banner; [_submit] clears it after a successful sign-in.
   Future<void> _loadKickMessage() async {
     final prefs = await SharedPreferences.getInstance();
     final reason =
         prefs.getString(AuthSessionStorage.kickReasonKey) ??
         'Your session was ended by an administrator.';
-    await prefs.remove(AuthSessionStorage.kickReasonKey);
     if (!mounted) return;
     setState(() => _kickMessage = reason);
   }
@@ -159,6 +162,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         password: _password.text,
         rememberMe: _rememberMe,
       );
+      // Fresh, successful sign-in — any previous force-logout notice is
+      // resolved, so the banner won't reappear on the next visit.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(AuthSessionStorage.kickReasonKey);
       if (!mounted) return;
       setState(() => _loading = false);
       context.go('/launching');
