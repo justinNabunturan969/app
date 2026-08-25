@@ -70,7 +70,34 @@ In the Supabase dashboard:
    - **Project URL** — looks like `https://abcdefgh.supabase.co`
    - **anon public** key — the long `eyJhbGciOi...` string
 
-## 4. Create your first user
+## 4. Disable email confirmation
+
+The in-app sign-up flow expects to sign the student straight in after
+registration (that is the product behavior). Supabase ships with
+"Confirm email" **enabled** by default, which blocks new accounts from
+logging in until they click a link in their inbox:
+
+1. Dashboard → **Authentication** → **Sign In / Providers** → **Email**
+   (older dashboards: **Authentication → Providers → Email**).
+2. Turn **OFF** the **"Confirm email"** toggle → **Save**.
+
+New sign-ups now get a session immediately. Accounts that were created
+while the toggle was still on are stuck in the "unconfirmed" state —
+un-stick them with:
+
+```sql
+-- Mark every pending account as confirmed so they can sign in.
+update auth.users
+   set email_confirmed_at = coalesce(email_confirmed_at, now()),
+       updated_at = now()
+ where email_confirmed_at is null;
+```
+
+> For the production-hardening checklist later, see step 8 — turning
+> confirmations back on is listed there together with the redirect-URL
+> work it requires.
+
+## 5. Create your first user
 
 You need at least one account to log in with. Easiest way is through the
 dashboard, but you can also do it from the SQL editor:
@@ -105,7 +132,7 @@ update public.profiles set role = 'student', full_name = 'Jefferson Bading',
 > "the buttons do nothing" — the controller sees the RLS deny as an
 > exception and shows a red banner.
 
-## 5. Seed some equipment (optional, for the demo)
+## 6. Seed some equipment (optional, for the demo)
 
 ```sql
 insert into public.equipment (code, name, category, location, total_count, available_count, description) values
@@ -116,7 +143,7 @@ insert into public.equipment (code, name, category, location, total_count, avail
   ('E-3141', 'Arduino Uno R3 Kit', 'Microcontrollers', 'Room 312 - Embedded Lab', 10, 10, 'ATmega328P, USB-B cable included.');
 ```
 
-## 6. Run the app with your credentials
+## 7. Run the app with your credentials
 
 From the project root:
 
@@ -257,6 +284,7 @@ during your defense.
 |---|---|
 | `StateError: Supabase is not configured` at startup | You forgot the `--dart-define` flags. Add them to your run command. |
 | Login fails with `Invalid login credentials` | The user doesn't exist in `auth.users` yet. Create them in **Authentication → Users** in the dashboard. |
+| New sign-up can't log in — "email not confirmed" | **Confirm email** is still ON. Turn it off (**Authentication → Sign In / Providers → Email**, see step 4) and un-stick existing accounts with the `update auth.users set email_confirmed_at ...` snippet from that section. |
 | `permission denied for table profiles` | RLS is blocking the read. Make sure you ran the migration script — it creates the policies. |
 | Equipment list is empty | You haven't seeded the `equipment` table yet. See step 5. |
 | `Project has been paused` | Free-tier projects pause after 7 days of inactivity. Open the dashboard once a week to keep it alive. |
