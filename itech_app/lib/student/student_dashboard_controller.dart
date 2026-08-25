@@ -271,8 +271,9 @@ class StudentDashboardController extends ChangeNotifier {
   /// `session_history`, so the history feed is refreshed afterwards and
   /// the kicked device signs itself out via its own presence watcher.
   Future<ForceLogoutOutcome> forceLogoutFromHistory(
-    LoginHistoryEntry entry,
-  ) async {
+    LoginHistoryEntry entry, {
+    String? reason,
+  }) async {
     final profileId = entry.profileId;
     if (profileId.isEmpty) return ForceLogoutOutcome.failed;
     // Never let an admin terminate their own session from this flow.
@@ -287,7 +288,7 @@ class StudentDashboardController extends ChangeNotifier {
     if (!online) return ForceLogoutOutcome.notOnline;
 
     try {
-      await bundle.user.removeSessionById(profileId);
+      await bundle.user.removeSessionById(profileId, note: reason);
     } catch (_) {
       return ForceLogoutOutcome.failed;
     }

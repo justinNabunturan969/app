@@ -33,10 +33,32 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   String? _rememberedName;
   DateTime? _lastLogin;
 
+  /// Set when the app was returned here by an administrator force
+  /// logout (`/student/login?kicked=1`). Holds the reason the admin
+  /// provided, or a default wording when none was given.
+  String? _kickMessage;
+  bool _kickChecked = false;
+
   @override
   void initState() {
     super.initState();
     _loadSavedCredentials();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_kickChecked) return;
+    _kickChecked = true;
+    final kicked =
+        GoRouterState.of(context).uri.queryParameters['kicked'] == '1';
+    if (kicked) {
+      setState(() {
+        _kickMessage =
+            forcedLogoutNotice ?? 'Your session was ended by an administrator.';
+        forcedLogoutNotice = null;
+      });
+    }
   }
 
   Future<void> _loadSavedCredentials() async {
@@ -256,6 +278,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                 tag: 'PUP',
               ),
               const SizedBox(height: 18),
+              if (_kickMessage != null) ...[
+                _KickedBanner(message: _kickMessage!),
+                const SizedBox(height: 14),
+              ],
               Container(
                 padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
                 decoration: BoxDecoration(
@@ -360,6 +386,66 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Banner shown on the login screen when an administrator force-logged
+/// this device out. Amber "security notice" tone — distinct from the
+/// red credential-error banner below the form.
+class _KickedBanner extends StatelessWidget {
+  const _KickedBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: PupColors.cyberAmber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: PupColors.cyberAmber.withValues(alpha: 0.55),
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.admin_panel_settings_rounded,
+            color: PupColors.cyberAmber,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Signed out by an administrator',
+                  style: TextStyle(
+                    color: PupColors.cyberAmber,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: PupColors.cyberAmber.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

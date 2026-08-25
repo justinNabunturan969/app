@@ -236,14 +236,28 @@ class SupabaseUserRepository implements UserRepository {
   /// Admin-only: deletes a specific user's row in `active_sessions`.
   /// RLS (the `is_admin()` policy on the table) gates the delete to
   /// admins only — students calling this will get 0 rows affected
-  /// and the kicked row stays in place.
+  /// and the kicked row stays in place. The optional [note] becomes
+  /// the reason shown on the kicked user's login screen.
   @override
-  Future<void> removeSessionById(String profileId) async {
+  Future<void> removeSessionById(String profileId, {String? note}) async {
     if (profileId.isEmpty) return;
     await _client.rpc(
       'end_active_session',
-      params: {'p_profile_id': profileId, 'p_reason': 'force_logout'},
+      params: {
+        'p_profile_id': profileId,
+        'p_reason': 'force_logout',
+        if (note != null && note.trim().isNotEmpty) 'p_note': note.trim(),
+      },
     );
+  }
+
+  /// Reads and deletes the signed-in user's force-logout notice in one
+  /// server-side call, so the reason is displayed exactly once.
+  @override
+  Future<String?> consumeForceLogoutNotice() async {
+    if (_client.auth.currentUser == null) return null;
+    final result = await _client.rpc('consume_force_logout_notice');
+    return result is String && result.isNotEmpty ? result : null;
   }
 
   /// Realtime feed of the signed-in user's own `active_sessions` row.

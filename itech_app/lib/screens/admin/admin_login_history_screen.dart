@@ -252,12 +252,16 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                             onForceLogout: isSelf
                                 ? null
                                 : () async {
-                                    final approved = await _confirmKick(
+                                    final reason = await _confirmKick(
                                       context,
                                       entry,
                                     );
-                                    if (!approved) return;
-                                    await _runForceLogout(ctrl, entry);
+                                    if (reason == null) return;
+                                    await _runForceLogout(
+                                      ctrl,
+                                      entry,
+                                      reason,
+                                    );
                                   },
                           );
                         },
@@ -292,47 +296,74 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
         onForceLogout: isSelf
             ? null
             : () async {
-                final approved = await _confirmKick(context, entry);
-                if (!approved || !ctx.mounted) return;
+                final reason = await _confirmKick(context, entry);
+                if (reason == null || !ctx.mounted) return;
                 Navigator.of(ctx).pop();
-                await _runForceLogout(ctrl, entry);
+                await _runForceLogout(ctrl, entry, reason);
               },
       ),
     );
   }
 
-  /// Confirmation dialog for the force-logout security action.
-  Future<bool> _confirmKick(
+  /// Confirmation dialog for the force-logout security action. Returns
+  /// the (possibly empty) reason to show the kicked user, or null when
+  /// the admin cancelled.
+  Future<String?> _confirmKick(
     BuildContext context,
     LoginHistoryEntry entry,
   ) async {
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Force logout ${entry.fullName}?'),
-        content: const Text(
-          'Their active session ends immediately and their device is '
-          'returned to the login screen. The action is recorded in '
-          'Login History as "Force logout".',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+    final reasonController = TextEditingController();
+    try {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Force logout ${entry.fullName}?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Their active session ends immediately and their device '
+                'is returned to the login screen. The action is recorded '
+                'in Login History as "Force logout".',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: reasonController,
+                maxLines: 2,
+                maxLength: 200,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (shown to the user)',
+                  hintText: 'e.g., ID not found in PUP student records',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
           ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: PupColors.signalRed,
-              foregroundColor: Colors.white,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Force logout'),
-          ),
-        ],
-      ),
-    );
-    return approved ?? false;
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: PupColors.signalRed,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text('Force logout'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true) return null;
+      return reasonController.text.trim();
+    } finally {
+      reasonController.dispose();
+    }
   }
 
   /// Execute the kick and surface the outcome. The controller refreshes
@@ -341,9 +372,13 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
   Future<void> _runForceLogout(
     StudentDashboardController ctrl,
     LoginHistoryEntry entry,
+    String reason,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final outcome = await ctrl.forceLogoutFromHistory(entry);
+    final outcome = await ctrl.forceLogoutFromHistory(
+      entry,
+      reason: reason.isEmpty ? null : reason,
+    );
     final message = switch (outcome) {
       ForceLogoutOutcome.terminated =>
         '${entry.fullName} was signed out of all devices.',

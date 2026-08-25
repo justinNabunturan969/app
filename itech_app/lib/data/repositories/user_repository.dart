@@ -84,8 +84,15 @@ abstract class UserRepository {
   /// Admin: forcibly end another user's session. Deletes the row in
   /// `active_sessions` for `profileId`. Students must not be able to
   /// call this — the Supabase bundle relies on the RLS policy
-  /// `is_admin()` to gate it server-side.
-  Future<void> removeSessionById(String profileId);
+  /// `is_admin()` to gate it server-side. An optional [note] is stored
+  /// as the reason the kicked user sees on their login screen.
+  Future<void> removeSessionById(String profileId, {String? note});
+
+  /// Fetches and clears the one-shot "you were force-logged-out" notice
+  /// for the signed-in user, or null when there is none. Must be called
+  /// BEFORE the local session is dropped — the RPC resolves the user
+  /// from their auth token.
+  Future<String?> consumeForceLogoutNotice();
 
   /// Admin-only audit log: every row in `session_history` joined with
   /// the matching `profiles` row, plus a count of borrowings that
@@ -160,9 +167,15 @@ class MockUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> removeSessionById(String profileId) async {
+  Future<void> removeSessionById(String profileId, {String? note}) async {
     // No-op for the mock — the kick UI already removes the row from
     // the local cache; there's no DB to keep in sync.
+  }
+
+  @override
+  Future<String?> consumeForceLogoutNotice() async {
+    // Offline demo: no kick notices exist.
+    return null;
   }
 
   @override

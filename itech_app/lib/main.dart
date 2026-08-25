@@ -18,6 +18,12 @@ late final ThemeController themeController;
 late final LanguageController languageController;
 late final RepositoryBundle repositoryBundle;
 
+/// One-shot reason shown on the login screen after an administrator
+/// force-logs the current device out. Fetched while the session is
+/// still alive (the notice RPC resolves the caller from their token),
+/// consumed by [StudentLoginScreen], then cleared.
+String? forcedLogoutNotice;
+
 /// Convenience accessor used everywhere in the app code.
 SupabaseClient get supabase => Supabase.instance.client;
 
@@ -77,11 +83,18 @@ Future<void> main() async {
         userRepository: repositoryBundle.user,
         onForcedLogout: () async {
           // An administrator terminated this session (Login History or
-          // Live tab → force logout). Drop the local session and bounce
-          // through the launch animation, which routes to the welcome
-          // screen now that no session remains.
+          // Live tab → force logout). Grab the reason notice while the
+          // token still works, wipe the local session, and land the
+          // user on the student login page where the notice is shown.
+          try {
+            forcedLogoutNotice = await repositoryBundle.user
+                .consumeForceLogoutNotice();
+          } catch (_) {
+            // Best effort — the login screen falls back to a default
+            // message when the notice can't be fetched.
+          }
           await authSessionStorage.clearSession();
-          appRouter.router.go('/launching');
+          appRouter.router.go('/student/login?kicked=1');
         },
         child: RouterApp(
           router: appRouter.router,
