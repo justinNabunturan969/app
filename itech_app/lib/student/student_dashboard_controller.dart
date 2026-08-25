@@ -23,6 +23,18 @@ import 'models.dart'
 // it stays in sync with the UI without a DB round-trip).
 import 'mock_data.dart' show StudentMockData;
 
+/// Result of an admin force-logout issued from the Login History tab.
+enum ForceLogoutOutcome {
+  /// The user had a live session and it was terminated.
+  terminated,
+
+  /// The user is not currently signed in on any device.
+  notOnline,
+
+  /// The call failed (RLS rejection or network error).
+  failed,
+}
+
 class StudentDashboardController extends ChangeNotifier {
   StudentDashboardController({required this.bundle}) {
     // Per-second ticker drives the "1h 23m left" countdown strings in the
@@ -250,6 +262,49 @@ class StudentDashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Admin security action from the Login History tab: terminate a
+  /// user's live session by profile id. Unlike [kickSession] this does
+  /// not require the row to already sit in the local occupancy cache —
+  /// the live list is re-fetched first so "is this user online right
+  /// now?" is answered from the server, not from a possibly-stale
+  /// snapshot. The kick appends a `force_logout` row to
+  /// `session_history`, so the history feed is refreshed afterwards and
+  /// the kicked device signs itself out via its own presence watcher.
+  Future<ForceLogoutOutcome> forceLogoutFromHistory(
+    LoginHistoryEntry entry,
+  ) async {
+    final profileId = entry.profileId;
+    if (profileId.isEmpty) return ForceLogoutOutcome.failed;
+    // Never let an admin terminate their own session from this flow.
+    if (profileId == currentAuthId) return ForceLogoutOutcome.failed;
+
+    try {
+      _activeSessions = await bundle.user.getActiveSessions();
+    } catch (_) {
+      // Fall back to the cached snapshot below.
+    }
+    final online = _activeSessions.any((s) => s.id == profileId);
+    if (!online) return ForceLogoutOutcome.notOnline;
+
+    try {
+      await bundle.user.removeSessionById(profileId);
+    } catch (_) {
+      return ForceLogoutOutcome.failed;
+    }
+
+    _activeSessions.removeWhere((s) => s.id == profileId);
+    _log(
+      scope: ActivityScope.admin,
+      icon: Icons.logout_rounded,
+      tone: PupColors.signalRed,
+      title: 'Forced logout: ${entry.fullName}',
+      subtitle: '${entry.studentId} • Terminated from Login History',
+    );
+    notifyListeners();
+    unawaited(loadLoginHistory());
+    return ForceLogoutOutcome.terminated;
+  }
+
   /// Fetch the latest live-occupancy feed. Used by the admin's Live
   /// tab on first load and on pull-to-refresh. Safe to call from any
   /// shell — RLS keeps the result scoped to what the caller can see.
@@ -289,6 +344,11 @@ class StudentDashboardController extends ChangeNotifier {
   /// repository so the controller doesn't have to import the Supabase
   /// client directly.
   String? get _selfAuthId => bundle.user.currentAuthId;
+
+  /// Public alias for [_selfAuthId] so admin screens can hide destructive
+  /// actions (like force logout) that would target the signed-in account
+  /// itself.
+  String? get currentAuthId => _selfAuthId;
 
   /// The student's own `ActiveSession`, or null when the row doesn't
   /// exist. Read-only — used by the admin shell's login history view

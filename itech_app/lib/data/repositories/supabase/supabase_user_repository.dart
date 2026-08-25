@@ -246,6 +246,21 @@ class SupabaseUserRepository implements UserRepository {
     );
   }
 
+  /// Realtime feed of the signed-in user's own `active_sessions` row.
+  /// RLS lets a user read only their own row, so the stream is a clean
+  /// present/absent signal: an admin force-logout deletes the row and
+  /// the stream emits `false` on the kicked device within ~a second.
+  @override
+  Stream<bool> watchOwnSessionPresence() {
+    final user = _client.auth.currentUser;
+    if (user == null) return const Stream<bool>.empty();
+    return _client
+        .from('active_sessions')
+        .stream(primaryKey: ['profile_id'])
+        .eq('profile_id', user.id)
+        .map((rows) => rows.isNotEmpty);
+  }
+
   /// Admin-only audit log: every row in `session_history` joined with
   /// the matching `profiles` row. RLS in migration 0006 already gates
   /// the read to admins (`session_history_admin_read`).

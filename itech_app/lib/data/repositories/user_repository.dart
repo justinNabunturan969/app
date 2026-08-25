@@ -62,6 +62,13 @@ abstract class UserRepository {
   /// a manual refresh before it can show a newly logged-in student.
   Stream<List<ActiveSession>> watchActiveSessions();
 
+  /// Emits whether the SIGNED-IN user currently has their own row in
+  /// `active_sessions`. Realtime-backed in the Supabase bundle: when an
+  /// admin force-logs this account out, the row is deleted and the stream
+  /// emits `false`, which the session lifecycle guard turns into an
+  /// immediate local sign-out. Emits nothing when signed out.
+  Stream<bool> watchOwnSessionPresence();
+
   /// Best-effort cleanup of the current user's session row. Called on
   /// sign-out (and on app pause / detach) so the Live tab reflects
   /// reality instead of accumulating every account that's ever signed
@@ -132,6 +139,13 @@ class MockUserRepository implements UserRepository {
   @override
   Stream<List<ActiveSession>> watchActiveSessions() {
     return Stream.value(List.unmodifiable(StudentMockData.activeSessions));
+  }
+
+  @override
+  Stream<bool> watchOwnSessionPresence() {
+    // Offline demo: presence never disappears on its own, so there is
+    // nothing to watch.
+    return const Stream<bool>.empty();
   }
 
   @override

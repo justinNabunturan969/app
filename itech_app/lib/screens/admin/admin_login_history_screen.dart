@@ -238,11 +238,29 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                         itemCount: history.length,
                         separatorBuilder: (_, _) =>
                             const SizedBox(height: 10),
-                        itemBuilder: (context, i) => _HistoryCard(
-                          entry: history[i],
-                          onTap: () =>
-                              _showSessionSheet(context, history[i]),
-                        ),
+                        itemBuilder: (context, i) {
+                          final entry = history[i];
+                          final isSelf =
+                              entry.profileId == ctrl.currentAuthId;
+                          return _HistoryCard(
+                            entry: entry,
+                            onTap: () => _showSessionSheet(
+                              context,
+                              ctrl,
+                              entry,
+                            ),
+                            onForceLogout: isSelf
+                                ? null
+                                : () async {
+                                    final approved = await _confirmKick(
+                                      context,
+                                      entry,
+                                    );
+                                    if (!approved) return;
+                                    await _runForceLogout(ctrl, entry);
+                                  },
+                          );
+                        },
                       ),
                     ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -258,13 +276,87 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
   /// Open the per-session detail sheet. Shown as a bottom sheet so
   /// the full credential set + activity list has room to breathe
   /// without crowding the timeline.
-  void _showSessionSheet(BuildContext context, LoginHistoryEntry entry) {
+  void _showSessionSheet(
+    BuildContext context,
+    StudentDashboardController ctrl,
+    LoginHistoryEntry entry,
+  ) {
     HapticFeedback.selectionClick();
+    final isSelf = entry.profileId == ctrl.currentAuthId;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => _SessionDetailSheet(entry: entry),
+      builder: (ctx) => _SessionDetailSheet(
+        entry: entry,
+        onForceLogout: isSelf
+            ? null
+            : () async {
+                final approved = await _confirmKick(context, entry);
+                if (!approved || !ctx.mounted) return;
+                Navigator.of(ctx).pop();
+                await _runForceLogout(ctrl, entry);
+              },
+      ),
+    );
+  }
+
+  /// Confirmation dialog for the force-logout security action.
+  Future<bool> _confirmKick(
+    BuildContext context,
+    LoginHistoryEntry entry,
+  ) async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Force logout ${entry.fullName}?'),
+        content: const Text(
+          'Their active session ends immediately and their device is '
+          'returned to the login screen. The action is recorded in '
+          'Login History as "Force logout".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.signalRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.logout_rounded, size: 18),
+            label: const Text('Force logout'),
+          ),
+        ],
+      ),
+    );
+    return approved ?? false;
+  }
+
+  /// Execute the kick and surface the outcome. The controller refreshes
+  /// `session_history` afterwards, so the new "Force logout" entry
+  /// appears in the list without a manual pull-to-refresh.
+  Future<void> _runForceLogout(
+    StudentDashboardController ctrl,
+    LoginHistoryEntry entry,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final outcome = await ctrl.forceLogoutFromHistory(entry);
+    final message = switch (outcome) {
+      ForceLogoutOutcome.terminated =>
+        '${entry.fullName} was signed out of all devices.',
+      ForceLogoutOutcome.notOnline =>
+        '${entry.fullName} has no active session right now.',
+      ForceLogoutOutcome.failed =>
+        'Could not force logout ${entry.fullName}. Try again.',
+    };
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -505,10 +597,18 @@ class _HistoryStatTile extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.entry, required this.onTap});
+  const _HistoryCard({
+    required this.entry,
+    required this.onTap,
+    this.onForceLogout,
+  });
 
   final LoginHistoryEntry entry;
   final VoidCallback onTap;
+
+  /// Non-null shows the one-tap force-logout action on the card. Null
+  /// (the admin's own rows) hides it entirely.
+  final VoidCallback? onForceLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -676,6 +776,16 @@ class _HistoryCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onForceLogout != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: onForceLogout,
+                  tooltip: 'Force logout ${entry.fullName}',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.logout_rounded),
+                  color: PupColors.signalRed,
+                ),
+              ],
             ],
           ),
         ),
@@ -919,9 +1029,14 @@ class _HistoryErrorPanel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _SessionDetailSheet extends StatelessWidget {
-  const _SessionDetailSheet({required this.entry});
+  const _SessionDetailSheet({required this.entry, this.onForceLogout});
 
   final LoginHistoryEntry entry;
+
+  /// Non-null shows the "Force logout user" action. Null (the admin's
+  /// own session) hides it. The callback confirms, pops the sheet, and
+  /// runs the kick — see [_AdminLoginHistoryScreenState._showSessionSheet].
+  final Future<void> Function()? onForceLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -1112,6 +1227,36 @@ class _SessionDetailSheet extends StatelessWidget {
                               label: 'End reason',
                               value: _reasonLabel(entry.endReason),
                             ),
+
+                            if (onForceLogout != null) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: PupColors.signalRed,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onPressed: onForceLogout,
+                                  icon: const Icon(
+                                    Icons.logout_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text(
+                                    'Force logout user',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
 
                             const SizedBox(height: 18),
 

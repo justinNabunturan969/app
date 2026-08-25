@@ -41,10 +41,17 @@ class SessionLifecycleGuard extends StatefulWidget {
     super.key,
     required this.userRepository,
     required this.child,
+    this.onForcedLogout,
   });
 
   final UserRepository userRepository;
   final Widget child;
+
+  /// Called when an administrator force-logs this account out (the
+  /// user's `active_sessions` row disappears while a session is still
+  /// held). The handler should drop the local session and navigate to
+  /// an auth entry screen.
+  final Future<void> Function()? onForcedLogout;
 
   @override
   State<SessionLifecycleGuard> createState() => _SessionLifecycleGuardState();
@@ -55,6 +62,17 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
   Object? _webVisibilityHandle;
   Timer? _heartbeat;
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<bool>? _presenceSub;
+
+  /// Whether we have seen our own `active_sessions` row since the last
+  /// (re)subscribe. A disappearing row only means "admin kick" when we
+  /// previously had one — right after sign-in the row legitimately
+  /// doesn't exist for the first moments.
+  bool _hadPresenceRow = false;
+
+  /// Dedupe flag so a single kick can't trigger the handler twice
+  /// (realtime can emit more than one empty snapshot).
+  bool _kickHandled = false;
 
   @override
   void initState() {
@@ -80,11 +98,24 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
         case AuthChangeEvent.initialSession:
         case AuthChangeEvent.signedIn:
         case AuthChangeEvent.tokenRefreshed:
-          if (data.session != null) unawaited(_markOnline());
+          if (data.session != null) {
+            unawaited(_markOnline());
+            // (Re)arm the forced-logout watcher — the account may have
+            // changed since the last subscription.
+            _watchPresence();
+          }
+        case AuthChangeEvent.signedOut:
+          _presenceSub?.cancel();
+          _presenceSub = null;
+          _hadPresenceRow = false;
         default:
           break;
       }
     });
+
+    // Start watching for an admin force-logout right away — the session
+    // may already be restored from persisted storage on a cold start.
+    _watchPresence();
 
     // `onPause` / `onHide` fire when the user switches tabs, loses
     // window focus, or backgrounds the app on mobile — all of which
@@ -125,10 +156,46 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
     _listener?.dispose();
     _heartbeat?.cancel();
     _authSubscription?.cancel();
+    _presenceSub?.cancel();
     if (kIsWeb && _webVisibilityHandle != null) {
       unregisterVisibilityChange(_webVisibilityHandle!);
     }
     super.dispose();
+  }
+
+  /// Subscribe to the signed-in user's own `active_sessions` row. When an
+  /// administrator deletes it (Login History / Live tab → force logout),
+  /// the stream flips to `false` and we hand the event to
+  /// [SessionLifecycleGuard.onForcedLogout] so the device signs itself
+  /// out instead of silently heartbeat-ing back after the cooldown.
+  void _watchPresence() {
+    _presenceSub?.cancel();
+    _hadPresenceRow = false;
+    _presenceSub = widget.userRepository.watchOwnSessionPresence().listen((
+      present,
+    ) {
+      if (present) {
+        _hadPresenceRow = true;
+        return;
+      }
+      // Row gone. Only a kick when we previously had the row and are
+      // still holding a session — a self sign-out already cleared it.
+      if (!_hadPresenceRow || _kickHandled) return;
+      if (Supabase.instance.client.auth.currentSession == null) return;
+      _kickHandled = true;
+      unawaited(_handleForcedLogout());
+    });
+  }
+
+  Future<void> _handleForcedLogout() async {
+    try {
+      await widget.onForcedLogout?.call();
+    } catch (_) {
+      // Best effort — never leave the dedupe flag stuck if the handler
+      // throws; the next kick attempt should still go through.
+    } finally {
+      _kickHandled = false;
+    }
   }
 
   @override

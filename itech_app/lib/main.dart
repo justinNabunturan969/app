@@ -65,20 +65,26 @@ Future<void> main() async {
   languageController = LanguageController();
   await languageController.load();
 
+  final appRouter = AppRouter(
+    authStorage: authSessionStorage,
+    initialLocation: initialLocation,
+  );
+
   runApp(
     Provider<RepositoryBundle>.value(
       value: repositoryBundle,
       child: SessionLifecycleGuard(
-        // Drops the current user's `active_sessions` row whenever
-        // the app is backgrounded, hidden, detached, or (on web)
-        // the tab is closed. Re-registers the row on resume/show
-        // so the admin's Live tab stays accurate.
         userRepository: repositoryBundle.user,
+        onForcedLogout: () async {
+          // An administrator terminated this session (Login History or
+          // Live tab → force logout). Drop the local session and bounce
+          // through the launch animation, which routes to the welcome
+          // screen now that no session remains.
+          await authSessionStorage.clearSession();
+          appRouter.router.go('/launching');
+        },
         child: RouterApp(
-          router: AppRouter(
-            authStorage: authSessionStorage,
-            initialLocation: initialLocation,
-          ).router,
+          router: appRouter.router,
           themeController: themeController,
           languageController: languageController,
         ),
