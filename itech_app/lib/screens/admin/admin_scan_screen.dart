@@ -460,18 +460,23 @@ class _Viewfinder extends StatelessWidget {
               ),
             ),
 
-            // Scan line
+            // Scan line — sweeps top to bottom. `Positioned` must be a
+            // direct child of Stack: nesting it under a LayoutBuilder
+            // crashes with "Incorrect use of ParentDataWidget" the moment
+            // this tab opens, so the sweep position is driven through
+            // Align instead (0 → top edge, 1 → bottom edge).
             if (isActive)
-              AnimatedBuilder(
-                animation: animation,
-                builder: (context, _) {
-                  return LayoutBuilder(
-                    builder: (context, c) {
-                      final y = 16 + animation.value * (c.maxHeight - 32);
-                      return Positioned(
-                        left: 16,
-                        right: 16,
-                        top: y,
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
+                  child: AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, _) {
+                      return Align(
+                        alignment: Alignment(0, animation.value * 2 - 1),
                         child: Container(
                           height: 2,
                           decoration: BoxDecoration(
@@ -495,8 +500,8 @@ class _Viewfinder extends StatelessWidget {
                         ),
                       );
                     },
-                  );
-                },
+                  ),
+                ),
               ),
 
             // Corner brackets
