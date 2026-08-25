@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app/app_reloader_stub.dart'
+    if (dart.library.js_interop) 'app/app_reloader_web.dart';
 import 'app/session_lifecycle_guard.dart';
 import 'app/theme_controller.dart';
 import 'app/language_controller.dart';
@@ -88,10 +90,18 @@ Future<void> main() async {
             if (fetched != null && fetched.isNotEmpty) reason = fetched;
           } catch (_) {
             // Best effort — the default wording still explains the kick.
+            // NOTE: if this fires on every kick, migration 0017
+            // (`force_logout_notices` + `consume_force_logout_notice`)
+            // has not been applied to the database yet.
           }
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString(AuthSessionStorage.kickReasonKey, reason);
+            // Arm the cold-start replay BEFORE signing out: the fresh boot
+            // reads this flag and starts at `/launching?kicked=1`, which
+            // guarantees the animation + login-screen hand-off even if the
+            // reload lands on a bare origin without the query string.
+            await prefs.setBool(AuthSessionStorage.kickReloadPendingKey, true);
           } catch (_) {
             // Best effort.
           }
@@ -100,11 +110,21 @@ Future<void> main() async {
           } catch (_) {
             // Best effort.
           }
-          // ALWAYS navigate — even if a step above failed, the device
-          // must leave the shell and replay the launch animation into
-          // the login page. Skipping this left users stranded on a
-          // signed-out shell with NotSignedInException banners.
-          appRouter.router.go('/launching?kicked=1');
+
+          // Reload the app for real — same experience as a first launch:
+          // every controller, stream subscription, and cached snapshot is
+          // torn down, the wrench rises / glides / types the app name, and
+          // the fresh boot ends on the login page with the admin's reason.
+          final reloaded = reloadAppToUrl(
+            launchReloadUrl('/launching?kicked=1'),
+          );
+          if (!reloaded) {
+            // Native targets can't reload their own engine — replay the
+            // launch route inside the living app instead. ALWAYS navigate:
+            // even if a step above failed, the device must leave the shell
+            // rather than sit on a signed-out shell with error banners.
+            appRouter.router.go('/launching?kicked=1');
+          }
         },
         child: RouterApp(
           router: appRouter.router,

@@ -45,11 +45,32 @@ added, run the remaining migrations in order in the SQL Editor:
 | `0010_student_session_history_rls.sql` | No-op tombstone (student self-read intentionally not granted). |
 | `0011_production_security_and_api_grants.sql` | **Required.** Explicit Data API grants, profile identity protection, revokes the student-ID→email lookup helper. |
 | `0012_drop_dead_functions_and_finish_grants.sql` | Drops unused functions (`touch_active_session`, `auth_email_for_student_id`) and finishes RPC grant hardening. |
-| `0013_session_kick_cooldown.sql` | Prevents a force-logged-out user's heartbeat from resurrecting their `active_sessions` row. |
+| `0013_session_kick_cooldown.sql` | **Required.** Prevents a force-logged-out user's heartbeat from resurrecting their `active_sessions` row. |
+| `0014_return_verification_flow.sql` | Return verification flow. |
+| `0015_student_id_login_and_profile_bootstrap.sql` | **Required.** Student-ID sign-in RPC (`sign_in_identifier`) + profile bootstrap. |
+| `0016_user_deletion_inventory_restore.sql` | Restores equipment inventory when a user account is deleted. |
+| `0017_force_logout_notice.sql` | **Required for forced logouts.** Adds `force_logout_notices` + the one-shot `consume_force_logout_notice()` RPC. The kicked device calls it to show the admin's reason on the login screen — without it every kick shows only the generic "Your session was ended by an administrator." wording and detection falls back to realtime events alone. |
+| `0018_student_id_login_resilience.sql` | Resilience fixes for student-ID sign-in. |
 
-A fresh project only needs `0001_initial_schema.sql` followed by
-`0003`, `0005`, `0011`, `0012`, and `0013`; running every file in order is
-also safe — they are idempotent.
+A fresh project needs `0001_initial_schema.sql` followed by
+`0003`, `0005`, `0011`, `0012`, `0013`, `0015`, and `0017` at minimum;
+running every file in order is also safe — they are idempotent.
+
+### Forced-logout behavior (admin → user device)
+
+When an admin force-logs a user out from Login History / Live:
+
+1. The user's device detects the kick (realtime presence event or the
+   30-second heartbeat checking the persisted notice), consumes the
+   admin's reason while its token still works, persists it locally,
+   signs itself out, and **reloads the app**.
+2. The reload plays the same launch animation as a first start
+   (wrench rises, glides left, types the app name).
+3. The fresh boot then lands on the student login screen showing the
+   exact reason the admin entered.
+
+If the message shown is always the generic fallback wording, migration
+`0017_force_logout_notice.sql` has not been applied to that database.
 
 To verify it worked, run this in the SQL editor:
 

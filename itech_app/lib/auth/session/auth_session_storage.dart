@@ -54,6 +54,13 @@ class AuthSessionStorage {
   /// screen removes it after displaying.
   static const kickReasonKey = 'auth_kick_reason';
 
+  /// One-shot flag set right before the kicked device reloads itself.
+  /// The fresh boot reads it in [getInitialRoute] and starts at
+  /// `/launching?kicked=1`, so the cold-start animation replays and ends
+  /// on the login screen with the admin's reason — no URL gymnastics
+  /// needed, this works even if the reload lands on a bare origin.
+  static const kickReloadPendingKey = 'auth_kick_reload_pending';
+
   static const _studentIdKey = 'auth_student_id';
   static const _studentEmailKey = 'auth_student_email';
   static const _studentUsernameKey = 'auth_student_username';
@@ -67,8 +74,22 @@ class AuthSessionStorage {
   // ── Public API used by the router and the login screens ─────────────
 
   Future<String> getInitialRoute() async {
-    // Always start at /launching. The loader plays the wrench zoom
-    // animation, then routes to the right home shell (or /welcome for
+    // Forced-logout replay: the previous session was ended by an admin,
+    // and the handler asked for a full reload. Boot straight into the
+    // launch route carrying `kicked=1` so the wrench animation plays and
+    // LaunchLoader routes to the login screen with the persisted reason.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(kickReloadPendingKey) ?? false) {
+        await prefs.remove(kickReloadPendingKey);
+        return '/launching?kicked=1';
+      }
+    } catch (_) {
+      // Prefs unavailable — fall through to the normal entry point.
+    }
+
+    // Otherwise always start at /launching. The loader plays the wrench
+    // zoom animation, then routes to the right home shell (or /welcome for
     // signed-out users) based on the current auth state. This is the
     // single entry point for every cold start of the app.
     return '/launching';

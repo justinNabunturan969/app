@@ -27,6 +27,11 @@ class _LaunchLoaderState extends State<LaunchLoader>
   late final AnimationController _controller;
   late final Animation<double> _wrenchScale;
 
+  /// Captured in [didChangeDependencies] BEFORE any async gap: reading
+  /// `GoRouterState.of(context)` after an `await` is unsafe (the element
+  /// may have been deactivated mid-animation).
+  bool _kicked = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +49,24 @@ class _LaunchLoaderState extends State<LaunchLoader>
       ),
       TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 60),
     ]).animate(_controller);
+    // NOTE: the kick flag is captured in [didChangeDependencies], which
+    // always runs right after [initState] — `GoRouterState.of(context)`
+    // may not be called this early.
     _runAndAdvance();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Also re-capture if the route updates while the animation is running
+    // (e.g. the kick handler navigates here mid-boot).
+    _captureKickFlag();
+  }
+
+  void _captureKickFlag() {
+    _kicked =
+        GoRouterState.of(context).uri.queryParameters['kicked'] == '1' ||
+        _kicked;
   }
 
   Future<void> _runAndAdvance() async {
@@ -55,9 +77,7 @@ class _LaunchLoaderState extends State<LaunchLoader>
     // Forced-logout replay: an administrator kicked this device, so the
     // "reload" lands on the login screen where the admin's reason is
     // shown (read from prefs by StudentLoginScreen).
-    final kicked =
-        GoRouterState.of(context).uri.queryParameters['kicked'] == '1';
-    if (kicked) {
+    if (_kicked) {
       context.go('/student/login?kicked=1');
       return;
     }

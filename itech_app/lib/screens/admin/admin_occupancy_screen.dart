@@ -193,7 +193,7 @@ class AdminOccupancyScreen extends StatelessWidget {
                           session: sessions[i],
                           onTap: () => _showSessionSheet(context, sessions[i]),
                           onKick: () =>
-                              _confirmKick(context, ctrl, sessions[i]),
+                              _forceLogoutFlow(context, ctrl, sessions[i]),
                         ),
                       ),
                     ),
@@ -207,53 +207,122 @@ class AdminOccupancyScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmKick(
-    BuildContext context,
-    StudentDashboardController ctrl,
-    ActiveSession session,
-  ) async {
-    HapticFeedback.mediumImpact();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Force logout?'),
-        content: Text(
-          'This will terminate ${session.studentName}\'s session. '
-          'They will need to sign in again.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: PupColors.signalRed,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Force Logout'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    ctrl.kickSession(session.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Logged out: ${session.studentName}'),
-      ),
-    );
-  }
-
   void _showSessionSheet(BuildContext context, ActiveSession s) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => _SessionDetailSheet(session: s),
+      // The OUTER context is threaded through so the sheet's Force Logout
+      // button can dismiss itself first and still run the kick flow from
+      // a context that stays valid after the sheet route is popped.
+      builder: (ctx) =>
+          _SessionDetailSheet(session: s, parentContext: context),
     );
   }
+}
+
+/// Shared force-logout flow for the Live tab (session card + detail sheet).
+///
+/// The reason is MANDATORY — the kicked device shows it on its login
+/// screen after the forced reload. This mirrors the Login History tab's
+/// kick flow; the previous Live-tab dialog collected no reason at all,
+/// so the server stored only generic fallback wording and the kicked
+/// user never saw WHY they were signed out.
+Future<void> _forceLogoutFlow(
+  BuildContext context,
+  StudentDashboardController ctrl,
+  ActiveSession session,
+) async {
+  HapticFeedback.mediumImpact();
+  final reasonController = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+  String? reason;
+  try {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Force logout ${session.studentName}?'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Their active session ends immediately and their device '
+                'is returned to the login screen. The action is recorded '
+                'in Login History as "Force logout".',
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: reasonController,
+                maxLines: 2,
+                maxLength: 200,
+                textCapitalization: TextCapitalization.sentences,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'A reason is required — the user will see it '
+                        'on their login screen.';
+                  }
+                  return null;
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Reason (required, shown to the user)',
+                  hintText: 'e.g., ID not found in PUP student records',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.signalRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.of(ctx).pop(true);
+            },
+            icon: const Icon(Icons.logout_rounded, size: 18),
+            label: const Text('Force logout'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true) return;
+    reason = reasonController.text.trim();
+  } finally {
+    reasonController.dispose();
+  }
+  if (!context.mounted) return;
+
+  // forceLogoutProfile re-verifies the session against the server and
+  // forwards the note, which becomes the notice the kicked device shows.
+  final messenger = ScaffoldMessenger.of(context);
+  final outcome = await ctrl.forceLogoutProfile(
+    profileId: session.id,
+    studentId: session.studentId,
+    fullName: session.studentName,
+    reason: reason,
+  );
+  final message = switch (outcome) {
+    ForceLogoutOutcome.terminated =>
+      '${session.studentName} was signed out of all devices.',
+    ForceLogoutOutcome.notOnline =>
+      '${session.studentName} has no active session right now.',
+    ForceLogoutOutcome.failed =>
+      'Could not force logout ${session.studentName}. Try again.',
+  };
+  messenger.showSnackBar(
+    SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -866,8 +935,12 @@ class _MenuRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _SessionDetailSheet extends StatelessWidget {
-  const _SessionDetailSheet({required this.session});
+  const _SessionDetailSheet({required this.session, required this.parentContext});
   final ActiveSession session;
+
+  /// The screen context the sheet was opened from. Still valid after the
+  /// sheet route is popped, unlike the sheet's own [BuildContext].
+  final BuildContext parentContext;
 
   @override
   Widget build(BuildContext context) {
@@ -1031,17 +1104,13 @@ class _SessionDetailSheet extends StatelessWidget {
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: () {
+                        // Read the controller from the OUTER context before
+                        // popping — the sheet's own context dies with the
+                        // route, and the kick flow must run afterwards.
+                        final ctrl = parentContext
+                            .read<StudentDashboardController>();
                         Navigator.pop(context);
-                        // Reuse the kick flow.
-                        final ctrl = context.read<StudentDashboardController>();
-                        ctrl.kickSession(session.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Logged out: ${session.studentName}',
-                            ),
-                          ),
-                        );
+                        _forceLogoutFlow(parentContext, ctrl, session);
                       },
                       icon: const Icon(Icons.logout_rounded),
                       label: const Text('Force Logout'),
