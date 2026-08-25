@@ -262,19 +262,20 @@ class StudentDashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Admin security action from the Login History tab: terminate a
-  /// user's live session by profile id. Unlike [kickSession] this does
-  /// not require the row to already sit in the local occupancy cache —
-  /// the live list is re-fetched first so "is this user online right
-  /// now?" is answered from the server, not from a possibly-stale
-  /// snapshot. The kick appends a `force_logout` row to
-  /// `session_history`, so the history feed is refreshed afterwards and
-  /// the kicked device signs itself out via its own presence watcher.
-  Future<ForceLogoutOutcome> forceLogoutFromHistory(
-    LoginHistoryEntry entry, {
+  /// Admin security action: terminate a user's live session by profile
+  /// id. Unlike [kickSession] this does not require the row to already
+  /// sit in the local occupancy cache — the live list is re-fetched
+  /// first so "is this user online right now?" is answered from the
+  /// server, not from a possibly-stale snapshot. The kick appends a
+  /// `force_logout` row to `session_history`, so the history feed is
+  /// refreshed afterwards and the kicked device signs itself out via
+  /// its own presence watcher.
+  Future<ForceLogoutOutcome> forceLogoutProfile({
+    required String profileId,
+    String? studentId,
+    String? fullName,
     String? reason,
   }) async {
-    final profileId = entry.profileId;
     if (profileId.isEmpty) return ForceLogoutOutcome.failed;
     // Never let an admin terminate their own session from this flow.
     if (profileId == currentAuthId) return ForceLogoutOutcome.failed;
@@ -298,12 +299,27 @@ class StudentDashboardController extends ChangeNotifier {
       scope: ActivityScope.admin,
       icon: Icons.logout_rounded,
       tone: PupColors.signalRed,
-      title: 'Forced logout: ${entry.fullName}',
-      subtitle: '${entry.studentId} • Terminated from Login History',
+      title: 'Forced logout: ${fullName ?? studentId ?? profileId}',
+      subtitle:
+          '${studentId ?? profileId} • Terminated from Login History',
     );
     notifyListeners();
     unawaited(loadLoginHistory());
     return ForceLogoutOutcome.terminated;
+  }
+
+  /// Convenience wrapper for rows that already carry the user's
+  /// credentials (Login History cards / detail sheet).
+  Future<ForceLogoutOutcome> forceLogoutFromHistory(
+    LoginHistoryEntry entry, {
+    String? reason,
+  }) {
+    return forceLogoutProfile(
+      profileId: entry.profileId,
+      studentId: entry.studentId,
+      fullName: entry.fullName,
+      reason: reason,
+    );
   }
 
   /// Fetch the latest live-occupancy feed. Used by the admin's Live

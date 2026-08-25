@@ -145,7 +145,16 @@ class SupabaseUserRepository implements UserRepository {
           // because mobile browsers throttle background timers, so a
           // student who briefly backgrounded the app can come back
           // without their row being invisible to the admin.
-          DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
+          //
+          // MUST be UTC: `DateTime.now()` is local and `toIso8601String()`
+          // then emits a suffix-less timestamp that Postgres (running in
+          // UTC) reads as-is — for a UTC+8 device that put the threshold
+          // ~8 hours in the future, so NO heartbeat ever passed the
+          // filter and the admin's Live tab was permanently "0 online".
+          DateTime.now()
+              .toUtc()
+              .subtract(const Duration(minutes: 5))
+              .toIso8601String(),
         )
         .order('last_activity_at', ascending: false);
 

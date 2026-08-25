@@ -76,6 +76,7 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                 // indicator from snapping back too fast.
                 await Future.wait([
                   ctrl.loadLoginHistory(),
+                  ctrl.loadActiveSessions(),
                   Future<void>.delayed(const Duration(milliseconds: 350)),
                 ]);
               },
@@ -167,6 +168,26 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                           ),
                           const SizedBox(height: 18),
 
+                          // Live presence — users with an active session
+                          // RIGHT NOW. They only appear in the recorded
+                          // list below once their session ends, so this
+                          // strip is where a currently-online user (and
+                          // their force-logout action) lives.
+                          if (ctrl.activeSessions.isNotEmpty) ...[
+                            _OnlineNowSection(
+                              sessions: ctrl.activeSessions,
+                              currentAuthId: ctrl.currentAuthId,
+                              onForceLogout: (session) =>
+                                  _confirmAndKick(
+                                    context,
+                                    ctrl,
+                                    profileId: session.id,
+                                    displayName: session.studentName,
+                                  ),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
+
                           // Section title
                           Row(
                             children: [
@@ -251,18 +272,12 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                             ),
                             onForceLogout: isSelf
                                 ? null
-                                : () async {
-                                    final reason = await _confirmKick(
+                                : () => _confirmAndKick(
                                       context,
-                                      entry,
-                                    );
-                                    if (reason == null) return;
-                                    await _runForceLogout(
                                       ctrl,
-                                      entry,
-                                      reason,
-                                    );
-                                  },
+                                      profileId: entry.profileId,
+                                      displayName: entry.fullName,
+                                    ),
                           );
                         },
                       ),
@@ -296,10 +311,15 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
         onForceLogout: isSelf
             ? null
             : () async {
-                final reason = await _confirmKick(context, entry);
+                final reason = await _confirmKick(context, entry.fullName);
                 if (reason == null || !ctx.mounted) return;
                 Navigator.of(ctx).pop();
-                await _runForceLogout(ctrl, entry, reason);
+                await _runKick(
+                  ctrl,
+                  profileId: entry.profileId,
+                  displayName: entry.fullName,
+                  reason: reason,
+                );
               },
       ),
     );
@@ -308,16 +328,13 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
   /// Confirmation dialog for the force-logout security action. Returns
   /// the (possibly empty) reason to show the kicked user, or null when
   /// the admin cancelled.
-  Future<String?> _confirmKick(
-    BuildContext context,
-    LoginHistoryEntry entry,
-  ) async {
+  Future<String?> _confirmKick(BuildContext context, String displayName) async {
     final reasonController = TextEditingController();
     try {
       final approved = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('Force logout ${entry.fullName}?'),
+          title: Text('Force logout $displayName?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,29 +386,48 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
   /// Execute the kick and surface the outcome. The controller refreshes
   /// `session_history` afterwards, so the new "Force logout" entry
   /// appears in the list without a manual pull-to-refresh.
-  Future<void> _runForceLogout(
-    StudentDashboardController ctrl,
-    LoginHistoryEntry entry,
-    String reason,
-  ) async {
+  Future<void> _runKick(
+    StudentDashboardController ctrl, {
+    required String profileId,
+    required String displayName,
+    String? reason,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
-    final outcome = await ctrl.forceLogoutFromHistory(
-      entry,
-      reason: reason.isEmpty ? null : reason,
+    final outcome = await ctrl.forceLogoutProfile(
+      profileId: profileId,
+      fullName: displayName,
+      reason: reason,
     );
     final message = switch (outcome) {
       ForceLogoutOutcome.terminated =>
-        '${entry.fullName} was signed out of all devices.',
+        '$displayName was signed out of all devices.',
       ForceLogoutOutcome.notOnline =>
-        '${entry.fullName} has no active session right now.',
+        '$displayName has no active session right now.',
       ForceLogoutOutcome.failed =>
-        'Could not force logout ${entry.fullName}. Try again.',
+        'Could not force logout $displayName. Try again.',
     };
     messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+
+  /// Confirm + run, for one-tap surfaces (history card / online row).
+  Future<void> _confirmAndKick(
+    BuildContext context,
+    StudentDashboardController ctrl, {
+    required String profileId,
+    required String displayName,
+  }) async {
+    final reason = await _confirmKick(context, displayName);
+    if (reason == null) return;
+    await _runKick(
+      ctrl,
+      profileId: profileId,
+      displayName: displayName,
+      reason: reason,
     );
   }
 
@@ -1477,6 +1513,235 @@ class _ActivityRow extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Live presence strip — users with an active session right now. These
+// users have NO row in `session_history` yet (history is written when a
+// session ends), so without this section a currently-online user would
+// be invisible on this tab and impossible to force-logout.
+// ─────────────────────────────────────────────────────────────────────────
+
+class _OnlineNowSection extends StatelessWidget {
+  const _OnlineNowSection({
+    required this.sessions,
+    required this.currentAuthId,
+    required this.onForceLogout,
+  });
+
+  final List<ActiveSession> sessions;
+  final String? currentAuthId;
+  final void Function(ActiveSession session) onForceLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryText =
+        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      decoration: BoxDecoration(
+        color: PupColors.mintGreen.withValues(alpha: isDark ? 0.08 : 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: PupColors.mintGreen.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _PulseDot(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Online right now — ${sessions.length} '
+                  'user${sessions.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final session in sessions)
+            _OnlineUserRow(
+              session: session,
+              isSelf: session.id == currentAuthId,
+              onForceLogout: () => onForceLogout(session),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseDot extends StatefulWidget {
+  const _PulseDot();
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.35, end: 1).animate(_controller),
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: const BoxDecoration(
+          color: PupColors.mintGreen,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: PupColors.mintGreen,
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OnlineUserRow extends StatelessWidget {
+  const _OnlineUserRow({
+    required this.session,
+    required this.isSelf,
+    required this.onForceLogout,
+  });
+
+  final ActiveSession session;
+  final bool isSelf;
+  final VoidCallback onForceLogout;
+
+  String get _initials {
+    final parts = session.studentName
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    final first = parts.first[0];
+    final last = parts.length > 1 ? parts.last[0] : '';
+    return (first + last).toUpperCase();
+  }
+
+  String get _activityAgo {
+    final diff = DateTime.now().difference(session.lastActivityAt);
+    if (diff.inMinutes < 1) return 'active just now';
+    if (diff.inMinutes == 1) return 'active 1 min ago';
+    return 'active ${diff.inMinutes} mins ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryText =
+        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final subtleText = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+        : PupColors.ashGray;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  PupColors.techCyan.withValues(alpha: 0.32),
+                  PupColors.techCyan.withValues(alpha: 0.10),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: PupColors.techCyan.withValues(alpha: 0.45),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _initials,
+              style: const TextStyle(
+                color: PupColors.techCyan,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSelf ? '${session.studentName} (you)' : session.studentName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  '${session.studentId.isEmpty ? '—' : session.studentId}'
+                  ' • $_activityAgo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: subtleText,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isSelf)
+            IconButton(
+              onPressed: onForceLogout,
+              tooltip: 'Force logout ${session.studentName}',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.logout_rounded),
+              color: PupColors.signalRed,
+            ),
         ],
       ),
     );
