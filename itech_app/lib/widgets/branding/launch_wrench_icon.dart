@@ -5,7 +5,9 @@ import '../../theme/design_tokens.dart';
 /// Crisp vector wrench used on the launch loader.
 ///
 /// Draws the classic open-end spanner silhouette (Material "build" glyph)
-/// with a CustomPainter so rendering never depends on the icon font.
+/// with a CustomPainter so rendering never depends on the icon font. The
+/// finish is a machined-metal look: brand-amber body with a specular rim
+/// light on the top-left edge and a soft bevel along the bottom-right.
 class LaunchWrenchIcon extends StatelessWidget {
   const LaunchWrenchIcon({
     super.key,
@@ -48,6 +50,8 @@ class _LaunchWrenchPainter extends CustomPainter {
     final wrench = _wrenchPath();
     final bounds = wrench.getBounds();
 
+    // Machined metal body: a bright roll-off at the top-left settles into
+    // the brand amber core, then deepens toward the bottom-right edge.
     canvas.drawPath(
       wrench,
       Paint()
@@ -55,21 +59,60 @@ class _LaunchWrenchPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.lerp(color, Colors.white, 0.18)!,
+            Color.lerp(color, Colors.white, 0.36)!,
+            Color.lerp(color, Colors.white, 0.10)!,
             color,
-            Color.lerp(color, Colors.black, 0.12)!,
+            Color.lerp(color, Colors.black, 0.26)!,
           ],
-          stops: const [0.0, 0.55, 1.0],
+          stops: const [0.0, 0.34, 0.62, 1.0],
         ).createShader(bounds),
     );
 
+    // Soft dark bevel hugging the lower-right silhouette for depth.
     canvas.drawPath(
       wrench,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.6
+        ..strokeWidth = 1.4
         ..strokeJoin = StrokeJoin.round
-        ..color = Colors.white.withValues(alpha: 0.22),
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.32),
+          ],
+          stops: const [0.48, 1.0],
+        ).createShader(bounds),
+    );
+
+    // Specular rim light catching the upper-left edge.
+    canvas.drawPath(
+      wrench,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.9
+        ..strokeJoin = StrokeJoin.round
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.55),
+            Colors.white.withValues(alpha: 0.08),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.35, 0.60],
+        ).createShader(bounds),
+    );
+
+    // Crisp hairline contour keeps the silhouette readable at small sizes.
+    canvas.drawPath(
+      wrench,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.5
+        ..strokeJoin = StrokeJoin.round
+        ..color = Colors.white.withValues(alpha: 0.24),
     );
 
     canvas.restore();

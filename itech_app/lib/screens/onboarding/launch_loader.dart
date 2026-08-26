@@ -8,7 +8,7 @@ import '../../widgets/branding/launch_wrench_icon.dart';
 
 /// The app's universal entry animation.
 ///
-/// The wrench rises exactly through the visual center, glides to its final
+/// The wrench settles in at the visual center, glides to its final
 /// wordmark position, then reveals the app name with a typewriter effect.
 class LaunchLoader extends StatefulWidget {
   const LaunchLoader({super.key});
@@ -24,6 +24,14 @@ class _LaunchLoaderState extends State<LaunchLoader>
   static const _wordmarkWidth = 145.0;
   static const _gap = 10.0;
 
+  /// Fraction of the timeline the wrench spends settling in at center
+  /// before it begins gliding toward the wordmark position.
+  static const _settleEnd = 0.16;
+
+  /// Fraction of the timeline at which the glide completes and the
+  /// typewriter reveal begins shortly after.
+  static const _glideEnd = 0.48;
+
   late final AnimationController _controller;
   late final Animation<double> _wrenchScale;
 
@@ -37,17 +45,19 @@ class _LaunchLoaderState extends State<LaunchLoader>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 2100),
     );
+    // Subtle scale-settle only — no vertical travel. The wrench simply
+    // eases into place at center, keeping the entry calm and precise.
     _wrenchScale = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(
-          begin: 0.72,
+          begin: 0.94,
           end: 1.0,
         ).chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 40,
+        weight: _settleEnd,
       ),
-      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 60),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 100 - _settleEnd),
     ]).animate(_controller);
     // NOTE: the kick flag is captured in [didChangeDependencies], which
     // always runs right after [initState] — `GoRouterState.of(context)`
@@ -111,15 +121,15 @@ class _LaunchLoaderState extends State<LaunchLoader>
     required double progress,
     required double finalX,
   }) {
-    if (progress <= 0.40) {
-      final t = Curves.easeOutBack.transform(progress / 0.40);
-      return Alignment.lerp(const Alignment(0, 2.15), Alignment.center, t)!;
+    // No rise-in: the wrench starts settled at center, holds through the
+    // settle phase, then glides to its lockup position beside the wordmark.
+    if (progress <= _settleEnd) {
+      return Alignment.center;
     }
-    if (progress <= 0.64) {
-      final t = Curves.easeInOutCubic.transform((progress - 0.40) / 0.24);
-      return Alignment.lerp(Alignment.center, Alignment(finalX, 0), t)!;
-    }
-    return Alignment(finalX, 0);
+    final t = Curves.easeInOutCubic.transform(
+      ((progress - _settleEnd) / (_glideEnd - _settleEnd)).clamp(0.0, 1.0),
+    );
+    return Alignment.lerp(Alignment.center, Alignment(finalX, 0), t)!;
   }
 
   @override
@@ -152,7 +162,7 @@ class _LaunchLoaderState extends State<LaunchLoader>
           return AnimatedBuilder(
             animation: _controller,
             builder: (context, _) {
-              final typingProgress = ((_controller.value - 0.64) / 0.27).clamp(
+              final typingProgress = ((_controller.value - 0.54) / 0.30).clamp(
                 0.0,
                 1.0,
               );
@@ -174,9 +184,14 @@ class _LaunchLoaderState extends State<LaunchLoader>
                         decoration: BoxDecoration(
                           boxShadow: [
                             BoxShadow(
-                              color: Color(0x4DFFB800),
-                              blurRadius: 28,
-                              spreadRadius: 3,
+                              color: Color(0x33FFB800),
+                              blurRadius: 36,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: Color(0x22FFB800),
+                              blurRadius: 14,
+                              spreadRadius: -2,
                             ),
                           ],
                         ),
