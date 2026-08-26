@@ -64,7 +64,9 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
         'equipment_id': equipment.id,
       });
     } else {
-      await _client.from('favorites').insert({
+      // Upsert (not insert): a double-tap race would otherwise surface a raw
+      // unique-violation even though the end state — liked — is correct.
+      await _client.from('favorites').upsert({
         'profile_id': uid,
         'equipment_id': equipment.id,
       });

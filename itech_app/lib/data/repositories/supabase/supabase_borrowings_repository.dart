@@ -147,12 +147,17 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
 
   @override
   Future<List<Borrowing>> getHistory() async {
-    // "History" is everything that's terminal — returned or rejected.
+    // "History" is everything terminal — returned, rejected, or cancelled by
+    // the student (0024). Cancelled requests previously vanished from every
+    // bucket, so they are included here; _fromRow strips their fake return
+    // date. Ordered by request time (terminal rows may lack returned_at) and
+    // hard-capped so the payload stays bounded as history accumulates.
     final rows = await _client
         .from('borrowings')
         .select(_selectWithJoins)
-        .inFilter('status', ['returned', 'rejected'])
-        .order('returned_at', ascending: false);
+        .inFilter('status', ['returned', 'rejected', 'cancelled'])
+        .order('requested_at', ascending: false)
+        .limit(300);
     return rows.map(_fromRow).toList(growable: false);
   }
 

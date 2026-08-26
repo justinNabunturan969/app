@@ -130,10 +130,13 @@ class SupabaseUserRepository implements UserRepository {
   Future<void> changeStudentId({required String newStudentId}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('You are no longer signed in.');
-    await _client
-        .from('profiles')
-        .update({'student_id': newStudentId.trim()})
-        .eq('id', user.id);
+    // Migration 0031: the identity-protection trigger blocks direct owner
+    // updates of student_id. The controlled RPC validates the school-ID
+    // format, uniqueness, and a 7-day change cooldown server-side.
+    await _client.rpc(
+      'change_own_student_id',
+      params: {'p_new_student_id': newStudentId.trim()},
+    );
   }
 
   /// Pulls the live-occupancy feed from Supabase. RLS lets admins see
