@@ -18,10 +18,10 @@ import 'session_lifecycle_guard_stub.dart'
 /// every one of those fires whenever the student switches tabs, locks
 /// their phone, or lets the screen sleep — the user is still on the
 /// device and may be back in a second, so a missing row would be
-/// misleading. The server's `expire_stale_sessions` sweep (2-minute
-/// threshold, called from the admin's `getActiveSessions`) handles
-/// users who have actually left; the heartbeat keeps everyone else
-/// visible.
+/// misleading. The server's `expire_stale_sessions` sweep (5-minute
+/// threshold, run every minute by pg_cron and from the admin's
+/// `getActiveSessions`) handles users who have actually left; the
+/// heartbeat keeps everyone else visible.
 ///
 /// We do react to the *positive* half of those signals: when the page
 /// comes back to the foreground (`onResume`, `onShow`, or
@@ -34,7 +34,7 @@ import 'session_lifecycle_guard_stub.dart'
 /// do **not** hook `pagehide` — that event fires on bfcache
 /// transitions and mobile screen-off, which is far more often than
 /// a real tab close, and was deleting the row while the user was
-/// still on the device. The 2-minute server-side sweep covers the
+/// still on the device. The 5-minute server-side sweep covers the
 /// genuine "tab closed and forgotten" case.
 class SessionLifecycleGuard extends StatefulWidget {
   const SessionLifecycleGuard({
@@ -97,12 +97,20 @@ class _SessionLifecycleGuardState extends State<SessionLifecycleGuard> {
       switch (data.event) {
         case AuthChangeEvent.initialSession:
         case AuthChangeEvent.signedIn:
-        case AuthChangeEvent.tokenRefreshed:
           if (data.session != null) {
             unawaited(_markOnline());
             // (Re)arm the forced-logout watcher — the account may have
             // changed since the last subscription.
             _watchPresence();
+          }
+        case AuthChangeEvent.tokenRefreshed:
+          // Refresh the presence row, but do NOT re-arm the presence
+          // watcher: refreshes arrive roughly hourly and re-subscribing
+          // would churn the realtime channel and reset _hadPresenceRow,
+          // briefly blinding kick detection for zero benefit (the user
+          // did not change).
+          if (data.session != null) {
+            unawaited(_markOnline());
           }
         case AuthChangeEvent.signedOut:
           _presenceSub?.cancel();

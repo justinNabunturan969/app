@@ -956,7 +956,11 @@ class StudentDashboardController extends ChangeNotifier {
 
   // ── Search (still client-side after the load) ────────────────────────
   Timer? _searchDebounceTimer;
-  final List<String> _recentSearches = ['Multimeter', 'Wrench Set', 'Arduino'];
+  // Starts EMPTY: this controller's recent-search list is not rendered by
+  // any screen (the dedicated search screen uses StudentSearchController,
+  // which persists its own list), so seeding demo values would only be a
+  // misleading trap for future maintenance.
+  final List<String> _recentSearches = [];
   List<String> get recentSearches => _recentSearches;
 
   bool _isSearching = false;
