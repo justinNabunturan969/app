@@ -51,7 +51,14 @@ abstract class UserRepository {
   });
 
   /// Changes the signed-in user's auth password.
-  Future<void> changePassword({required String newPassword});
+  ///
+  /// [currentPassword] is verified by re-authenticating against Supabase
+  /// Auth before the update is applied — throws when it does not match
+  /// the account's current password.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
 
   /// Requests an email change for the signed-in user.
   ///
@@ -173,7 +180,10 @@ class MockUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> changePassword({required String newPassword}) async {
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
     // Offline demo: nothing to persist.
   }
 

@@ -67,9 +67,33 @@ class SupabaseUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> changePassword({required String newPassword}) async {
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('You are no longer signed in.');
+
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw StateError(
+        'This account has no sign-in email, so the current password '
+        'cannot be verified. Contact the administrator.',
+      );
+    }
+
+    // Supabase Auth has no "verify password" call — re-authenticating
+    // with the current credentials IS the verification. A fresh session
+    // for the same user replaces the current one harmlessly.
+    try {
+      await _client.auth.signInWithPassword(
+        email: email,
+        password: currentPassword,
+      );
+    } on AuthException {
+      throw AuthException('Current password is incorrect.');
+    }
+
     await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
@@ -79,13 +103,17 @@ class SupabaseUserRepository implements UserRepository {
     if (user == null) throw StateError('You are no longer signed in.');
 
     final trimmed = newEmail.trim();
-    await _client.auth.updateUser(UserAttributes(email: trimmed));
+    final response = await _client.auth.updateUser(
+      UserAttributes(email: trimmed),
+    );
 
-    // When the project requires confirming email changes, the auth user
-    // keeps the OLD address until the link is clicked — detect that and
-    // hold off syncing `profiles.email` (student-ID login resolves the
-    // auth email through it, see [changeEmail] on the interface).
-    final updated = _client.auth.currentUser;
+    // When the project requires confirming email changes, the returned
+    // user keeps the OLD address (the new one is pending confirmation) —
+    // detect that and hold off syncing `profiles.email` (student-ID login
+    // resolves the auth email through it, see [changeEmail] on the
+    // interface). Read the response's user, NOT `auth.currentUser`,
+    // which can lag behind the update.
+    final updated = response.user;
     final appliedNow =
         updated != null &&
         (updated.email ?? '').toLowerCase() == trimmed.toLowerCase();

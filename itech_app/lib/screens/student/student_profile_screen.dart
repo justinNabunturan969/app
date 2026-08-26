@@ -514,6 +514,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   Future<void> _changePasswordFlow(BuildContext context) async {
     final formKey = GlobalKey<FormState>();
+    final current = TextEditingController();
     final password = TextEditingController();
     final confirm = TextEditingController();
     var successMessage = '';
@@ -527,6 +528,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         formKey: formKey,
         submitLabel: 'Update password',
         fields: [
+          TextFormField(
+            controller: current,
+            obscureText: true,
+            validator: AuthValidators.validatePassword,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Current password',
+              prefixIcon: Icon(Icons.lock_outline_rounded),
+            ),
+          ),
+          const SizedBox(height: 12),
           PasswordStrengthField(
             controller: password,
             validator: AuthValidators.validateNewPassword,
@@ -549,13 +561,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           await context
               .read<RepositoryBundle>()
               .user
-              .changePassword(newPassword: password.text);
+              .changePassword(
+                currentPassword: current.text,
+                newPassword: password.text,
+              );
           successMessage = 'Password updated.';
           return successMessage;
         },
       ),
     );
 
+    current.dispose();
     password.dispose();
     confirm.dispose();
     if (saved == true && context.mounted) _snack(context, successMessage);
@@ -582,7 +598,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             controller: email,
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
-            validator: AuthValidators.validatePupEmail,
+            validator: (value) {
+              final base = AuthValidators.validatePupEmail(value);
+              if (base != null) return base;
+              final same =
+                  (value ?? '').trim().toLowerCase() ==
+                  ctrl.studentEmail.trim().toLowerCase();
+              if (same) return 'This is already your email.';
+              return null;
+            },
             decoration: const InputDecoration(
               labelText: 'New PUP email',
               prefixIcon: Icon(Icons.alternate_email_rounded),
@@ -631,7 +655,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             controller: studentId,
             keyboardType: TextInputType.text,
             autocorrect: false,
-            validator: AuthValidators.validateStudentId,
+            validator: (value) {
+              final base = AuthValidators.validateStudentId(value);
+              if (base != null) return base;
+              if ((value ?? '').trim() == ctrl.studentId.trim()) {
+                return 'This is already your student ID.';
+              }
+              return null;
+            },
             decoration: const InputDecoration(
               labelText: 'New student ID',
               hintText: '2024-08721-MN-0',
