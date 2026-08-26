@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../student/models.dart';
+import '../auth_exceptions.dart';
 import '../equipment_repository.dart';
 
 /// Supabase-backed equipment catalogue. Maps the `equipment` table rows to the
@@ -12,6 +12,10 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
   SupabaseClient get _client => Supabase.instance.client;
 
   static Equipment _fromRow(Map<String, dynamic> row) {
+    // Migration 0030 embeds this user's own `favorites` row via PostgREST
+    // (RLS scopes it to auth.uid(), so it's empty or exactly one row).
+    final favs = row['favorites'];
+    final liked = favs is List && favs.isNotEmpty;
     return Equipment(
       id: row['id'] as String,
       code: (row['code'] as String?) ?? '',
@@ -21,10 +25,7 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
       available: (row['available_count'] as int?) ?? 0,
       total: (row['total_count'] as int?) ?? 0,
       description: (row['description'] as String?) ?? '',
-      // "Liked" is client-side state for the thesis prototype; once you add
-      // a real favorites table, persist it here and read it back in the
-      // select() projection below.
-      isLiked: false,
+      isLiked: liked,
     );
   }
 
@@ -32,7 +33,7 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
   Future<List<Equipment>> getAll() async {
     final rows = await _client
         .from('equipment')
-        .select()
+        .select('*, favorites ( profile_id )')
         .order('name', ascending: true);
     return rows.map(_fromRow).toList(growable: false);
   }
@@ -41,7 +42,7 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
   Future<Equipment?> getById(String id) async {
     final row = await _client
         .from('equipment')
-        .select()
+        .select('*, favorites ( profile_id )')
         .eq('id', id)
         .maybeSingle();
     if (row == null) return null;
@@ -50,18 +51,23 @@ class SupabaseEquipmentRepository implements EquipmentRepository {
 
   @override
   Future<void> toggleLike(Equipment equipment) async {
-    // Intentional no-op: there is no `favorites` table yet, so likes are
-    // purely client-side state held by the dashboard controller and reset
-    // on every reload. The UI heart button is still shown because the
-    // prototype treats it as a demo interaction — once persistence is
-    // wanted, create a `favorites (profile_id, equipment_id)` table, add
-    // an RLS policy scoped to `auth.uid()`, and write the toggle here.
-    assert(() {
-      debugPrint(
-        'SupabaseEquipmentRepository.toggleLike: no favorites table yet; '
-        'like state for ${equipment.id} is not persisted.',
-      );
-      return true;
-    }());
+    // Persisted against the `favorites` table (migration 0030). The
+    // dashboard controller flips its local state optimistically; this call
+    // makes it survive reloads. RLS scopes every write to auth.uid().
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) {
+      throw const NotSignedInException('toggleLike');
+    }
+    if (equipment.isLiked) {
+      await _client.from('favorites').delete().match({
+        'profile_id': uid,
+        'equipment_id': equipment.id,
+      });
+    } else {
+      await _client.from('favorites').insert({
+        'profile_id': uid,
+        'equipment_id': equipment.id,
+      });
+    }
   }
 }

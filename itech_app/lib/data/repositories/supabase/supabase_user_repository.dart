@@ -384,7 +384,10 @@ class SupabaseUserRepository implements UserRepository {
         .from('borrowings')
         .select('student_id, equipment_id, requested_at, equipment ( name )')
         .inFilter('student_id', profileIds)
-        .gte('requested_at', earliest.toIso8601String());
+        .gte('requested_at', earliest.toIso8601String())
+        // The result is filtered per-session window client-side anyway;
+        // cap the fetch so ancient sessions can't balloon the payload.
+        .limit(500);
 
     final byProfile = <String, List<Map<String, dynamic>>>{};
     for (final row in borrows) {

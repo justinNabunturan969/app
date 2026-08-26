@@ -46,13 +46,30 @@ class AuthValidators {
     return null;
   }
 
+  /// Login / password-reset forms: accepts the historical minimum so
+  /// existing accounts created under the old 6-char policy can still sign
+  /// in. Do NOT tighten this — use [validateNewPassword] when a password
+  /// is being CREATED or reset.
   static String? validatePassword(String? value) {
     final v = value ?? '';
     if (v.isEmpty) return 'Password is required.';
-    // Supabase Auth's default minimum is six characters. Requiring more in
-    // the client prevented valid existing accounts (such as `admin1`) from
-    // ever reaching Supabase.
+    // Supabase Auth's default minimum is six characters.
     if (v.length < 6) return 'Password must be at least 6 characters.';
+    return null;
+  }
+
+  /// Password creation (sign-up, reset): stricter than the login check.
+  /// Existing short accounts keep working; only NEW passwords must meet
+  /// the stronger bar. Also enable "Leaked password protection" in the
+  /// Supabase dashboard (Authentication -> Policies) for HaveIBeenPwned
+  /// checks server-side — see SUPABASE_SETUP.md.
+  static String? validateNewPassword(String? value) {
+    final v = value ?? '';
+    if (v.isEmpty) return 'Password is required.';
+    if (v.length < 8) return 'Password must be at least 8 characters.';
+    if (!RegExp(r'[A-Za-z]').hasMatch(v) || !RegExp(r'\d').hasMatch(v)) {
+      return 'Use at least one letter and one number.';
+    }
     return null;
   }
 

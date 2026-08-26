@@ -4,48 +4,73 @@
 -- Run this AFTER `0001_initial_schema.sql` and AFTER you've created the auth
 -- users in Supabase Auth (Authentication -> Users -> Add user). It does three
 -- things:
---   1. Promotes the admin auth user to the `admin` role so RLS lets them
+--   1. Promotes the admin auth user(s) to the `admin` role so RLS lets them
 --      approve / reject / see all borrowings.
---   2. Promotes student1 (and any other sample students) explicitly to the
---      `student` role, in case you ever change the default.
+--   2. Promotes the seeded students explicitly to the `student` role, in case
+--      you ever change the default.
 --   3. (Optional) Inserts a small demo borrowing + notification so the
 --      admin's Pending tab and the student's Notifications tab have
 --      something visible the first time you open the app.
+--
+-- SECURITY: role assignment matches EXPLICIT emails only. The previous
+-- version promoted any profile whose local part matched `ilike 'admin%'`;
+-- re-running that on a live project with self-signup enabled would hand the
+-- admin role to any student who registered e.g. `admin.x@pup.edu.ph`.
+--
+-- ── EDIT THE TWO LISTS BELOW to match the accounts you actually created. ────
 -- =============================================================================
 
--- 1. Admin role — matches the seed user's email no matter whether you
---    used `admin@pupitech.local`, `admin1@pupitech.local`,
---    `admin1@pup.edu.ph`, etc. We promote *any* profile whose local part
---    starts with "admin" and treat the rest as students.
-update public.profiles
-   set role = 'admin'
- where split_part(email, '@', 1) ilike 'admin%';
+do $$
+declare
+  v_admin_emails   text[] := array[
+    'admin@pupitech.local',
+    'admin@pup.edu.ph',
+    'admin1@pup.edu.ph'
+  ];
+  v_student_emails text[] := array[
+    'student1@pupitech.local',
+    'student2@pupitech.local',
+    'student1@pup.edu.ph'
+  ];
+  v_promoted int;
+begin
+  -- 1. Admin role — explicit allow-list only. lower() so storage casing
+  --    in auth.users can't dodge the match.
+  update public.profiles p
+     set role = 'admin'
+   where lower(p.email) = any (v_admin_emails);
+  get diagnostics v_promoted = row_count;
+  raise notice 'Promoted % profile(s) to admin.', v_promoted;
 
--- 2. Students (the default is already 'student', but this makes it explicit
---    and lets you promote/demote later from one place).
-update public.profiles
-   set role = 'student'
- where split_part(email, '@', 1) not ilike 'admin%';
+  -- 2. Students (the default is already 'student', but this makes it
+  --    explicit and lets you promote/demote later from one place). Only the
+  --    listed accounts are touched — real users are never downgraded.
+  update public.profiles p
+     set role = 'student'
+   where lower(p.email) = any (v_student_emails);
+end;
+$$;
 
 -- 3. (Optional) Demo data — comment this whole block out if you don't want
---    any seeded rows. It uses the first available equipment row for the
---    first available student so you don't need to look up UUIDs.
+--    any seeded rows. It uses the first available equipment row for a
+--    SEEDED student from the same explicit list above, never an arbitrary
+--    real user.
 do $$
 declare
   v_student uuid;
   v_equipment uuid;
   v_borrowing uuid;
 begin
-  -- Bail early if there's nothing to point at. The student lookup
-  -- matches any profile whose local part starts with "student", so the
-  -- same script works for `student1@pupitech.local`, `student1@pup.edu.ph`,
-  -- and any other email convention.
   select id into v_student from public.profiles
-    where split_part(email, '@', 1) ilike 'student%'
+    where lower(email) = any (array[
+      'student1@pupitech.local',
+      'student2@pupitech.local',
+      'student1@pup.edu.ph'
+    ])
     order by created_at
     limit 1;
   if v_student is null then
-    raise notice 'No student profile found — skipping demo seed.';
+    raise notice 'No seeded student profile found — skipping demo seed.';
     return;
   end if;
 

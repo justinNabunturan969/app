@@ -14,6 +14,7 @@ enum BorrowingStatus {
   overdue,
   rejected,
   approved,
+  cancelled,
 }
 
 @immutable

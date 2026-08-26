@@ -282,7 +282,7 @@ class _StudentSignupScreenState extends State<StudentSignupScreen> {
                       const SizedBox(height: 12),
                       PasswordStrengthField(
                         controller: _password,
-                        validator: AuthValidators.validatePassword,
+                        validator: AuthValidators.validateNewPassword,
                         textInputAction: TextInputAction.next,
                         enabled: !_loading,
                       ),

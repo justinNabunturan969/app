@@ -43,6 +43,11 @@ abstract class BorrowingsRepository {
 
   Future<void> returnBorrowing(String id);
 
+  /// Student: withdraw a still-pending request. Frees the
+  /// one-open-request-per-item slot immediately so the item can be
+  /// re-requested without waiting for an admin (migration 0024).
+  Future<void> cancelPending(String id);
+
   /// Admin: verify the physical return of a loan (or a pending return
   /// request). This is the transition that credits inventory on the
   /// Supabase backend (migration 0014).
@@ -198,6 +203,18 @@ class MockBorrowingsRepository implements BorrowingsRepository {
         status: BorrowingStatus.rejected,
         returnDate: DateTime.now(),
       ),
+    );
+  }
+
+  // ── Student: withdraw a pending request ───────────────────────────
+  @override
+  Future<void> cancelPending(String id) async {
+    final i = _pending.indexWhere((b) => b.id == id);
+    if (i == -1) return;
+    final found = _pending.removeAt(i);
+    _history.insert(
+      0,
+      found.copyWith(status: BorrowingStatus.cancelled),
     );
   }
 }

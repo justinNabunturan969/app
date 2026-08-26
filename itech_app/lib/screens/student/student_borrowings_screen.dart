@@ -535,6 +535,12 @@ class _BorrowingCard extends StatelessWidget {
           icon: Icons.block_rounded,
           label: 'Rejected',
         );
+      case BorrowingStatus.cancelled:
+        return (
+          tone: PupColors.ashGray,
+          icon: Icons.cancel_schedule_send_rounded,
+          label: 'Cancelled',
+        );
     }
   }
 
@@ -552,6 +558,8 @@ class _BorrowingCard extends StatelessWidget {
         return 'Returned';
       case BorrowingStatus.rejected:
         return 'Decided';
+      case BorrowingStatus.cancelled:
+        return 'Withdrawn';
     }
   }
 

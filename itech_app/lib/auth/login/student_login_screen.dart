@@ -37,6 +37,16 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   String? _rememberedName;
   DateTime? _lastLogin;
 
+  /// Feedback for the server-side sign-in rate limiter
+  /// (`sign_in_rate_limit`, see migrations 0018/0019). After a failed
+  /// attempt we ask the server how many tries remain; when the account is
+  /// locked we run a live countdown until the lockout expires.
+  static const int _maxSignInAttempts = 5;
+  int? _attemptsLeft;
+  DateTime? _lockedUntil;
+  String? _lockCountdown;
+  Timer? _lockTicker;
+
   /// Set when the app was returned here by an administrator force
   /// logout (`kicked=1`). Holds the reason the admin provided, or a
   /// default wording when none was given. Persists across refreshes —
@@ -107,6 +117,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
 
   @override
   void dispose() {
+    _lockTicker?.cancel();
     _studentId.dispose();
     _password.dispose();
     super.dispose();
@@ -154,6 +165,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     setState(() {
       _loading = true;
       _lastError = null;
+      _attemptsLeft = null;
     });
 
     try {
@@ -175,13 +187,83 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
         _loading = false;
         _lastError = _friendlyAuthError(e);
       });
+      unawaited(_refreshRateLimitStatus());
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _lastError = _friendlyAuthError(e);
       });
+      unawaited(_refreshRateLimitStatus());
     }
+  }
+
+  /// Ask the server (migration 0019) how the failed attempt affected the
+  /// rate limiter for THIS identifier. Shows an "attempts left" hint, or a
+  /// live lockout countdown when the account just got blocked. Best-effort:
+  /// any RPC failure simply leaves the plain error message in place.
+  Future<void> _refreshRateLimitStatus() async {
+    final identifier = _studentId.text.trim();
+    if (identifier.isEmpty) return;
+
+    try {
+      final res = await Supabase.instance.client.rpc(
+        'sign_in_attempt_status',
+        params: {'p_identifier': identifier},
+      );
+      if (res is! Map || !mounted) return;
+      final data = Map<String, dynamic>.from(res);
+
+      final untilRaw = data['locked_until'] as String?;
+      var lockedNow = false;
+      if (untilRaw != null) {
+        final until = DateTime.tryParse(untilRaw)?.toLocal();
+        if (until != null && until.isAfter(DateTime.now())) {
+          lockedNow = true;
+          _startLockCountdown(until);
+        }
+      }
+
+      final left = data['attempts_left'];
+      if (!lockedNow && left is num) {
+        setState(() => _attemptsLeft = left.toInt());
+      }
+    } catch (_) {
+      // Feedback is optional — never let it mask the real auth error.
+    }
+  }
+
+  /// Tick once per second until [until], then clear the lock state so the
+  /// Login button re-enables and the countdown banner disappears.
+  void _startLockCountdown(DateTime until) {
+    _lockTicker?.cancel();
+    setState(() {
+      _lockedUntil = until;
+      _lockCountdown = _formatCountdown(until);
+    });
+    _lockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        _lockTicker?.cancel();
+        return;
+      }
+      final remaining = until.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        _lockTicker?.cancel();
+        setState(() {
+          _lockedUntil = null;
+          _lockCountdown = null;
+        });
+      } else {
+        setState(() => _lockCountdown = _formatCountdown(until));
+      }
+    });
+  }
+
+  static String _formatCountdown(DateTime until) {
+    final remaining = until.difference(DateTime.now());
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> _showForgotPasswordDialog(BuildContext context) async {
@@ -356,13 +438,27 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                         const SizedBox(height: 12),
                         _ErrorBanner(message: _lastError!),
                       ],
+                      if (_lockCountdown != null) ...[
+                        const SizedBox(height: 12),
+                        _LockoutBanner(countdown: _lockCountdown!),
+                      ] else if (_attemptsLeft != null &&
+                          _attemptsLeft! > 0) ...[
+                        const SizedBox(height: 12),
+                        _AttemptsLeftBanner(
+                          attemptsLeft: _attemptsLeft!,
+                          maxAttempts: _maxSignInAttempts,
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       _PrimaryButton(
                         label: 'Login',
                         loading: _loading,
                         accent: PupColors.cyberAmber,
                         foreground: const Color(0xFF1B1B1B),
-                        onPressed: _loading ? null : _submit,
+                        onPressed:
+                            (_loading || _lockedUntil != null)
+                            ? null
+                            : _submit,
                       ),
                       const SizedBox(height: 10),
                       // Inline link to the sign-up flow so a brand-new
@@ -561,6 +657,99 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
+              style: const TextStyle(
+                color: PupColors.signalRed,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Amber hint shown after a wrong-credential attempt telling the student
+/// how many tries remain before the server locks the account.
+class _AttemptsLeftBanner extends StatelessWidget {
+  const _AttemptsLeftBanner({
+    required this.attemptsLeft,
+    required this.maxAttempts,
+  });
+
+  final int attemptsLeft;
+  final int maxAttempts;
+
+  @override
+  Widget build(BuildContext context) {
+    final plural = attemptsLeft == 1 ? 'attempt' : 'attempts';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PupColors.cyberAmber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: PupColors.cyberAmber.withValues(alpha: 0.55),
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: PupColors.cyberAmber,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$attemptsLeft of $maxAttempts $plural left before your '
+              'account is temporarily locked for 5 minutes.',
+              style: const TextStyle(
+                color: Color(0xFF8A6100),
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Red lockout banner with a LIVE countdown ("Try again in 4:32").
+/// The [countdown] string is refreshed every second by the parent state
+/// while the lockout is active; the Login button is disabled meanwhile.
+class _LockoutBanner extends StatelessWidget {
+  const _LockoutBanner({required this.countdown});
+
+  final String countdown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PupColors.signalRed.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: PupColors.signalRed.withValues(alpha: 0.45),
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.timer_outlined,
+            color: PupColors.signalRed,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Too many failed attempts. Try again in $countdown.',
               style: const TextStyle(
                 color: PupColors.signalRed,
                 fontWeight: FontWeight.w700,

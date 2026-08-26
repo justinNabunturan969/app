@@ -128,7 +128,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       if (hasRecoverySession) ...[
                         PasswordStrengthField(
                           controller: _password,
-                          validator: AuthValidators.validatePassword,
+                          validator: AuthValidators.validateNewPassword,
                           textInputAction: TextInputAction.next,
                           enabled: !_submitting,
                         ),

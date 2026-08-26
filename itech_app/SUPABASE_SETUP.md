@@ -51,6 +51,54 @@ added, run the remaining migrations in order in the SQL Editor:
 | `0016_user_deletion_inventory_restore.sql` | Restores equipment inventory when a user account is deleted. |
 | `0017_force_logout_notice.sql` | **Required for forced logouts.** Adds `force_logout_notices` + the one-shot `consume_force_logout_notice()` RPC. The kicked device calls it to show the admin's reason on the login screen — without it every kick shows only the generic "Your session was ended by an administrator." wording and detection falls back to realtime events alone. |
 | `0018_student_id_login_resilience.sql` | Resilience fixes for student-ID sign-in. |
+| `0019_sign_in_attempt_feedback.sql` | Read-only `sign_in_attempt_status()` RPC so the student login screen can show "attempts left" after a wrong password and a live countdown while the account is locked out. |
+| `0020_scheduled_maintenance.sql` | **Required.** pg_cron jobs: flips past-due borrowings to `overdue` (+ notification) and sweeps stale sessions into `session_history` every minute — no longer dependent on an admin being online. |
+| `0021_kick_cooldown_hardening.sql` | **Security fix.** A kicked client can no longer overwrite its `force_logout` session-end cooldown with a self-reported `'closed'`, which defeated the 60-second resurrection guard. |
+| `0022_sign_in_ip_throttle.sql` | **Hardening.** Per-IP sign-in throttling (30 failures / 15 min → 15 min lockout) checked *before* bcrypt work — stops password spraying across identifiers and cheap CPU DoS. Also documents the plaintext-password-through-RPC risk. |
+| `0023_rls_initplan_hardening.sql` | **Perf.** Rewrites pre-0011 RLS policies to `(select auth.uid())` / `(select public.is_admin())` so auth checks are cached per statement instead of evaluated per row. |
+| `0024_cancel_pending_request.sql` | Students can withdraw their own still-`pending` request via `transition_borrowing(id, 'cancel')`. Frees the one-open-request-per-item slot immediately (new terminal `'cancelled'` status). |
+| `0025_equipment_status_derivation.sql` | `equipment.status` availability classes are derived from `available_count` by a trigger (one-time drift backfill included); `maintenance`/`retired` stay manual. |
+| `0026_drop_dead_nfc_uid.sql` | Drops the never-used `profiles.nfc_uid` column (planned NFC feature never shipped). |
+| `0027_data_retention.sql` | Daily pg_cron pruning job: sign_in_rate_limit (30d), session_end_cooldown (1d), session_history (120d), borrowing_audit_log (365d). |
+| `0028_loan_period_setting.sql` | `app_settings` table + `_loan_period()` helper — the 3-day loan period is now a configurable setting (`loan_period_days`, admin-editable). |
+| `0029_enriched_borrowing_rpcs.sql` | `request_borrowing` / `transition_borrowing` return enriched jsonb (equipment + student embedded) so the app no longer re-fetches by id after every action. Backwards compatible with older clients. |
+| `0030_favorites.sql` | Real favorites: `favorites(profile_id, equipment_id)` with own-rows-only RLS; the heart button persists and survives reloads. |
+
+## Managing migrations (CLI workflow)
+
+These files are plain SQL intended to be applied in order. To avoid
+hand-running scripts in the SQL editor (which invites drift between
+environments), prefer the Supabase CLI:
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push          # applies any unapplied files under supabase/migrations/
+supabase db pull          # optional: reconcile hotfixes made in the dashboard
+```
+
+`supabase db push` tracks what has been applied per environment, so the
+"several migrations re-declare full function bodies" pattern stays safe.
+
+## Security & auth policy notes
+
+**Password policy.** The client requires 8+ characters with at least one
+letter and one digit for NEW passwords (`AuthValidators.validateNewPassword`,
+used on sign-up and reset); login still accepts legacy 6-character accounts.
+Also enable **Leaked password protection** server-side:
+*Dashboard → Authentication → Policies → Leaked password protection.*
+
+## Security notes
+
+**Student-ID sign-in password handling (migration 0018/0022).** Resolving a
+bare student number to an auth email requires proving the password inside the
+database, so the plaintext password traverses a PostgREST RPC
+(`sign_in_identifier`) in addition to GoTrue. It is TLS-protected in transit
+and never persisted, but it can surface in `pg_stat_activity` snapshots and in
+statement logs if verbose logging (`log_statement = 'all'`) is enabled — keep
+that setting off or exclude this RPC. Fully removing the exposure means moving
+verification solely into GoTrue (Edge Function + captcha), at the cost of
+re-enabling student-ID enumeration.
+
 
 A fresh project needs `0001_initial_schema.sql` followed by
 `0003`, `0005`, `0011`, `0012`, `0013`, `0015`, and `0017` at minimum;

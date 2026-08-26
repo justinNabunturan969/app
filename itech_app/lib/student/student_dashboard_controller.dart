@@ -604,7 +604,8 @@ class StudentDashboardController extends ChangeNotifier {
         .where(
           (b) =>
               b.status == BorrowingStatus.returned ||
-              b.status == BorrowingStatus.rejected,
+              b.status == BorrowingStatus.rejected ||
+              b.status == BorrowingStatus.cancelled,
         )
         .toList(growable: false);
   }
@@ -806,16 +807,50 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
-  // ── CRUD: Equipment likes (currently a no-op against the DB) ──────────
+  /// Student: withdraws a still-pending request. Moves it from
+  /// `pendingBorrowings` to `historyBorrowings` with status=cancelled and
+  /// frees the one-open-request slot server-side (migration 0024).
+  Future<bool> cancelPendingRequest(String id) async {
+    try {
+      await bundle.borrowings.cancelPending(id);
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return false;
+      _pendingBorrowings = _pendingBorrowings.where((b) => b.id != id).toList();
+      _historyBorrowings = [updated, ..._historyBorrowings];
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.cancel_schedule_send_rounded,
+        tone: PupColors.ashGray,
+        title: 'Cancelled: ${updated.equipmentName}',
+        subtitle: 'Your request was withdrawn.',
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      // User-action errors are surfaced by the caller's own UI. Don't
+      // pollute the shell banner with the raw exception — just log it.
+      debugPrint('action failed: $e');
+      return false;
+    }
+  }
 
-  /// `toggleLike` persists to the DB once you add a `favorites` table.
-  /// For now it's a local-only state flip — the mock controller had the
-  /// same behaviour.
+  // ── CRUD: Equipment likes ─────────────────────────────────────────────
+
+  /// Flips the like locally (optimistic UI) and persists it to the
+  /// `favorites` table via the repository (migration 0030). Persistence
+  /// failures don't roll the local flip back — the next reload re-syncs —
+  /// but they are logged.
   void toggleLike(Equipment equipment) {
+    final updated = equipment.copyWith(isLiked: !equipment.isLiked);
     _equipment = _equipment
-        .map((e) => e.id == equipment.id ? e.copyWith(isLiked: !e.isLiked) : e)
+        .map((e) => e.id == equipment.id ? updated : e)
         .toList();
     notifyListeners();
+    unawaited(
+      bundle.equipment.toggleLike(updated).catchError((Object e) {
+        debugPrint('toggleLike persistence failed: $e');
+      }),
+    );
   }
 
   // ── CRUD: Notifications ───────────────────────────────────────────────

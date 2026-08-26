@@ -59,8 +59,10 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
 
     // A rejected request was never borrowed, so it has no return date —
     // ignore any stray `returned_at` (older deployments stamped it on
-    // reject) so history doesn't display a fake return date.
+    // reject) so history doesn't display a fake return date. Same for a
+    // student-cancelled request (migration 0024): nothing was borrowed.
     if (status == BorrowingStatus.rejected ||
+        status == BorrowingStatus.cancelled ||
         status == BorrowingStatus.pending) {
       returnedAt = null;
     }
@@ -102,6 +104,8 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
         return BorrowingStatus.returned;
       case 'rejected':
         return BorrowingStatus.rejected;
+      case 'cancelled':
+        return BorrowingStatus.cancelled;
       default:
         return BorrowingStatus.pending;
     }
@@ -120,7 +124,12 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     final rows = await _client
         .from('borrowings')
         .select(_selectWithJoins)
-        .order('requested_at', ascending: false);
+        // Newest first, hard-capped. This runs on every realtime event AND
+        // on the admin's 15-second poll; without a cap the payload grows
+        // with the full history of the table. 500 covers every live bucket
+        // plus recent history many times over.
+        .order('requested_at', ascending: false)
+        .limit(500);
     return rows.map(_fromRow).toList(growable: false);
   }
 
@@ -248,7 +257,23 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     );
   }
 
+  @override
+  Future<void> cancelPending(String id) async {
+    await _client.rpc(
+      'transition_borrowing',
+      params: {'p_borrowing_id': id, 'p_action': 'cancel'},
+    );
+  }
+
   Future<Borrowing> _loadRpcBorrowing(dynamic row) async {
+    // Migration 0029 RPCs return an ENRICHED jsonb payload (equipment +
+    // student embedded, same shape as _selectWithJoins), so we can build the
+    // model straight from the response — no second round-trip per action.
+    if (row is Map && row['equipment'] is Map) {
+      return _fromRow(Map<String, dynamic>.from(row));
+    }
+    // Older server deployment (pre-0029): the RPC returned a bare borrowing
+    // row without joins, so resolve the display names via getById once.
     final id = switch (row) {
       {'id': final String id} => id,
       [{'id': final String id}, ...] => id,

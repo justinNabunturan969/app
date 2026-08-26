@@ -51,7 +51,10 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
     final rows = await _client
         .from('notifications')
         .select()
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        // The inbox only renders the newest entries; without a cap this
+        // query ships EVERY notification ever received and grows forever.
+        .limit(200);
     return rows.map(_fromRow).toList(growable: false);
   }
 
