@@ -66,6 +66,48 @@ class SupabaseUserRepository implements UserRepository {
         .eq('id', user.id);
   }
 
+  @override
+  Future<void> changePassword({required String newPassword}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('You are no longer signed in.');
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  @override
+  Future<bool> changeEmail({required String newEmail}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('You are no longer signed in.');
+
+    final trimmed = newEmail.trim();
+    await _client.auth.updateUser(UserAttributes(email: trimmed));
+
+    // When the project requires confirming email changes, the auth user
+    // keeps the OLD address until the link is clicked — detect that and
+    // hold off syncing `profiles.email` (student-ID login resolves the
+    // auth email through it, see [changeEmail] on the interface).
+    final updated = _client.auth.currentUser;
+    final appliedNow =
+        updated != null &&
+        (updated.email ?? '').toLowerCase() == trimmed.toLowerCase();
+    if (appliedNow) {
+      await _client
+          .from('profiles')
+          .update({'email': trimmed})
+          .eq('id', user.id);
+    }
+    return appliedNow;
+  }
+
+  @override
+  Future<void> changeStudentId({required String newStudentId}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('You are no longer signed in.');
+    await _client
+        .from('profiles')
+        .update({'student_id': newStudentId.trim()})
+        .eq('id', user.id);
+  }
+
   /// Pulls the live-occupancy feed from Supabase. RLS lets admins see
   /// every row (`is_admin()` true) and students see only their own
   /// (`profile_id = auth.uid()`), so the controller can call this

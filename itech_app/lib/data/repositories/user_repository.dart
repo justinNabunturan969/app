@@ -42,13 +42,32 @@ abstract class UserRepository {
   Future<UserProfile> getCurrentUser();
 
   /// Updates the editable, non-privileged fields of the signed-in profile.
-  /// Roles, email, and student ID are intentionally not client-editable.
+  /// Roles are intentionally not client-editable.
   Future<void> updateCurrentProfile({
     required String fullName,
     required String program,
     required String yearLevel,
     required String section,
   });
+
+  /// Changes the signed-in user's auth password.
+  Future<void> changePassword({required String newPassword});
+
+  /// Requests an email change for the signed-in user.
+  ///
+  /// Returns `true` when Supabase applied the change immediately, `false`
+  /// when a confirmation link was emailed instead (project setting
+  /// "Confirm email changes"). The `profiles.email` copy is only synced
+  /// when the change was applied now — student-ID login resolves the auth
+  /// email through `profiles.email`, so syncing ahead of confirmation
+  /// would lock the account out.
+  Future<bool> changeEmail({required String newEmail});
+
+  /// Changes the signed-in student's school ID in `profiles`.
+  ///
+  /// Throws when the new ID is already linked to another account (unique
+  /// constraint on `profiles.student_id`).
+  Future<void> changeStudentId({required String newStudentId});
 
   /// Every active session the current user is allowed to see. Admins
   /// see everyone; students see only themselves (enforced by the
@@ -151,6 +170,22 @@ class MockUserRepository implements UserRepository {
     required String section,
   }) async {
     // The offline demo does not persist profile edits between launches.
+  }
+
+  @override
+  Future<void> changePassword({required String newPassword}) async {
+    // Offline demo: nothing to persist.
+  }
+
+  @override
+  Future<bool> changeEmail({required String newEmail}) async {
+    // Offline demo: pretend the change applied immediately.
+    return true;
+  }
+
+  @override
+  Future<void> changeStudentId({required String newStudentId}) async {
+    // Offline demo: nothing to persist.
   }
 
   @override

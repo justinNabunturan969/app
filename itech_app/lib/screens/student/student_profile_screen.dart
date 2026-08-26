@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/theme_menu_button.dart';
 import '../../app/language_controller.dart';
+import '../../auth/validators/auth_validators.dart';
+import '../../auth/widgets/password_strength_field.dart';
 import '../../data/repositories/repository_bundle.dart';
 import '../../features/analytics/widgets/achievement_badge.dart';
 import '../../main.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
-import 'package:provider/provider.dart';
 
 /// Student profile tab.
 ///
@@ -433,6 +436,48 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 icon: const Icon(Icons.save_rounded),
                 label: const Text('Save changes'),
               ),
+              const SizedBox(height: 20),
+              Divider(
+                height: 1,
+                color: Theme.of(sheetContext).dividerColor.withValues(
+                      alpha: 0.4,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'ACCOUNT & SECURITY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                  color: Theme.of(sheetContext).hintColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _AccountSecurityTile(
+                icon: Icons.lock_outline_rounded,
+                label: 'Change password',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _changePasswordFlow(context);
+                },
+              ),
+              _AccountSecurityTile(
+                icon: Icons.alternate_email_rounded,
+                label: 'Change email',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _changeEmailFlow(context, ctrl);
+                },
+              ),
+              _AccountSecurityTile(
+                icon: Icons.badge_outlined,
+                label: 'Change student ID',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _changeStudentIdFlow(context, ctrl);
+                },
+              ),
             ],
           ),
         ),
@@ -458,6 +503,158 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       if (!context.mounted) return;
       _snack(context, 'Could not update your profile. Please try again.');
     }
+  }
+
+  // ── Account & security flows ────────────────────────────────────────────
+  //
+  // Each opens a dedicated form sheet (the edit-profile sheet is closed
+  // first), runs the repository call with inline error handling, and
+  // refreshes the dashboard controller so the profile card reflects the
+  // new value immediately.
+
+  Future<void> _changePasswordFlow(BuildContext context) async {
+    final formKey = GlobalKey<FormState>();
+    final password = TextEditingController();
+    final confirm = TextEditingController();
+    var successMessage = '';
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _AccountActionSheet(
+        title: 'Change password',
+        formKey: formKey,
+        submitLabel: 'Update password',
+        fields: [
+          PasswordStrengthField(
+            controller: password,
+            validator: AuthValidators.validateNewPassword,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: confirm,
+            obscureText: true,
+            validator: (value) =>
+                value != password.text ? 'Passwords do not match.' : null,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Confirm new password',
+              prefixIcon: Icon(Icons.lock_outline_rounded),
+            ),
+          ),
+        ],
+        onSubmit: () async {
+          await context
+              .read<RepositoryBundle>()
+              .user
+              .changePassword(newPassword: password.text);
+          successMessage = 'Password updated.';
+          return successMessage;
+        },
+      ),
+    );
+
+    password.dispose();
+    confirm.dispose();
+    if (saved == true && context.mounted) _snack(context, successMessage);
+  }
+
+  Future<void> _changeEmailFlow(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final email = TextEditingController(text: ctrl.studentEmail);
+    var successMessage = '';
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _AccountActionSheet(
+        title: 'Change email',
+        formKey: formKey,
+        submitLabel: 'Update email',
+        fields: [
+          TextFormField(
+            controller: email,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            validator: AuthValidators.validatePupEmail,
+            decoration: const InputDecoration(
+              labelText: 'New PUP email',
+              prefixIcon: Icon(Icons.alternate_email_rounded),
+            ),
+          ),
+        ],
+        onSubmit: () async {
+          final appliedNow = await context
+              .read<RepositoryBundle>()
+              .user
+              .changeEmail(newEmail: email.text);
+          successMessage = appliedNow
+              ? 'Email updated.'
+              : 'Confirmation link sent. Your email updates after you '
+                  'confirm it from your new inbox.';
+          return successMessage;
+        },
+      ),
+    );
+
+    email.dispose();
+    if (saved != true || !context.mounted) return;
+    await ctrl.load();
+    if (!context.mounted) return;
+    _snack(context, successMessage);
+  }
+
+  Future<void> _changeStudentIdFlow(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final studentId = TextEditingController(text: ctrl.studentId);
+    var successMessage = '';
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _AccountActionSheet(
+        title: 'Change student ID',
+        formKey: formKey,
+        submitLabel: 'Update student ID',
+        fields: [
+          TextFormField(
+            controller: studentId,
+            keyboardType: TextInputType.text,
+            autocorrect: false,
+            validator: AuthValidators.validateStudentId,
+            decoration: const InputDecoration(
+              labelText: 'New student ID',
+              hintText: '2024-08721-MN-0',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
+          ),
+        ],
+        onSubmit: () async {
+          await context
+              .read<RepositoryBundle>()
+              .user
+              .changeStudentId(newStudentId: studentId.text);
+          successMessage = 'Student ID updated.';
+          return successMessage;
+        },
+      ),
+    );
+
+    studentId.dispose();
+    if (saved != true || !context.mounted) return;
+    await ctrl.load();
+    if (!context.mounted) return;
+    _snack(context, successMessage);
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -500,6 +697,204 @@ String _formatMemberSince(DateTime d) {
     'December',
   ];
   return '${months[d.month - 1]} ${d.year}';
+}
+
+/// Maps repository/auth failures from the account-security actions to a
+/// friendly, actionable message.
+String _describeAccountActionError(Object error) {
+  if (error is PostgrestException) {
+    // Unique violation on profiles.student_id.
+    if (error.code == '23505') {
+      return 'That student ID is already linked to another account.';
+    }
+    return error.message;
+  }
+  if (error is AuthException) return error.message;
+  if (error is StateError) return error.message;
+  return 'Something went wrong. Please try again.';
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Account & security widgets (change password / email / student ID)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Tappable row inside the edit-profile sheet that opens one of the
+/// account-security flows. Mirrors the tinted-chip row style used by the
+/// preferences tiles above.
+class _AccountSecurityTile extends StatelessWidget {
+  const _AccountSecurityTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
+    final subtleText = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.6)
+        : PupColors.ashGray;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : PupColors.ashGray.withValues(alpha: 0.18),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : PupColors.ashGray.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 16, color: subtleText),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: titleColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, size: 18, color: subtleText),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Reusable bottom sheet for the account-security actions (password /
+/// email / student ID). Renders [fields] inside a Form, runs [onSubmit]
+/// with a busy state, surfaces failures inline so the entered values are
+/// kept, and pops `true` when the action succeeded.
+class _AccountActionSheet extends StatefulWidget {
+  const _AccountActionSheet({
+    required this.title,
+    required this.formKey,
+    required this.fields,
+    required this.submitLabel,
+    required this.onSubmit,
+  });
+
+  final String title;
+  final GlobalKey<FormState> formKey;
+  final List<Widget> fields;
+  final String submitLabel;
+
+  /// Throws to keep the sheet open and show the error; returns the
+  /// success message surfaced by the caller afterwards.
+  final Future<String> Function() onSubmit;
+
+  @override
+  State<_AccountActionSheet> createState() => _AccountActionSheetState();
+}
+
+class _AccountActionSheetState extends State<_AccountActionSheet> {
+  bool _submitting = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (!(widget.formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit();
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = _describeAccountActionError(error);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: Form(
+        key: widget.formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.title,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 14),
+            ...widget.fields,
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(
+                  color: PupColors.signalRed,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _submitting ? null : _submit,
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_rounded),
+              label: Text(widget.submitLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _Achievement {
