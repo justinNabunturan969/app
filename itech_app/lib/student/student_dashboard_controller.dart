@@ -951,27 +951,46 @@ class StudentDashboardController extends ChangeNotifier {
   /// request. Inventory was already credited when the student submitted
   /// `request_return` (migration 0032), so this is now a pure status
   /// transition that moves the borrowing into history with
-  /// status=returned.
-  Future<bool> confirmReturnBorrowing(String id) async {
+  /// status=returned. The [condition] (required) and [notes] (optional)
+  /// are recorded as part of the audit trail (migration 0034).
+  ///
+  /// Returns the persisted [Borrowing] on success, or null on failure.
+  /// Callers that previously checked a `bool` should now check
+  /// `result != null`.
+  Future<Borrowing?> confirmReturnBorrowing(
+    String id, {
+    required String condition,
+    String? notes,
+  }) async {
     try {
-      await bundle.borrowings.confirmReturn(id);
+      await bundle.borrowings.confirmReturn(id, condition: condition, notes: notes);
       final updated = await bundle.borrowings.getById(id);
-      if (updated == null) return false;
+      if (updated == null) return null;
       _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
       _overdueBorrowings = _overdueBorrowings.where((b) => b.id != id).toList();
       _historyBorrowings = [updated, ..._historyBorrowings];
+      // Surface the condition in the activity feed subtitle so other
+      // admins can see at a glance whether a return was flagged.
+      final conditionLabel = switch (condition) {
+        'good' => 'Good condition',
+        'damaged' => '⚠ Damaged',
+        'needs_repair' => '🛠 Needs repair',
+        _ => condition,
+      };
       _log(
         scope: ActivityScope.admin,
         icon: Icons.verified_rounded,
-        tone: PupColors.mintGreen,
+        tone: condition == 'good'
+            ? PupColors.mintGreen
+            : PupColors.cyberAmber,
         title: 'Return verified: ${updated.equipmentName}',
-        subtitle: '${updated.studentName} • ${updated.studentId}',
+        subtitle: '$conditionLabel • ${updated.studentName}',
       );
       notifyListeners();
-      return true;
+      return updated;
     } catch (e) {
       debugPrint('action failed: $e');
-      return false;
+      return null;
     }
   }
 

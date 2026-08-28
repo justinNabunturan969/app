@@ -11,6 +11,7 @@ import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/activity_feed.dart';
 import '../../widgets/profile_avatar_button.dart';
+import 'widgets/return_confirmation_sheet.dart';
 
 /// Admin Dashboard — the equipment office's home base.
 ///
@@ -298,24 +299,11 @@ class AdminDashboardScreen extends StatelessWidget {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _ReturnConfirmCard(
                                   borrowing: b,
-                                  onConfirm: () async {
-                                    HapticFeedback.lightImpact();
-                                    final confirmed = await ctrl
-                                        .confirmReturnBorrowing(b.id);
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          confirmed
-                                              ? 'Return confirmed — ${b.equipmentName} is available again.'
-                                              : 'Could not confirm this return. Please refresh and try again.',
-                                        ),
-                                        backgroundColor: confirmed
-                                            ? null
-                                            : PupColors.signalRed,
-                                      ),
-                                    );
-                                  },
+                                  onConfirm: () => _openReturnConfirmation(
+                                    context,
+                                    ctrl,
+                                    b,
+                                  ),
                                 ),
                               ),
                           const SizedBox(height: 16),
@@ -499,6 +487,54 @@ class AdminDashboardScreen extends StatelessWidget {
     await authSessionStorage.clearSession();
     if (!context.mounted) return;
     context.go('/role');
+  }
+
+  /// Open the structured return confirmation form for [b] (which should
+  /// be in `return_requested`, `active`, or `overdue`). The form forces
+  /// the admin to record a condition before the loan is closed out.
+  Future<void> _openReturnConfirmation(
+    BuildContext context,
+    StudentDashboardController ctrl,
+    Borrowing b,
+  ) async {
+    HapticFeedback.lightImpact();
+    final result = await showModalBottomSheet<Borrowing?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ReturnConfirmationSheet(
+        borrowing: b,
+        onSubmit: ({required condition, notes}) => ctrl.confirmReturnBorrowing(
+          b.id,
+          condition: condition.value,
+          notes: notes,
+        ),
+      ),
+    );
+    if (!context.mounted) return;
+    if (result == null) return;
+    final cond = result.returnCondition;
+    final msg = switch (cond) {
+      'good' =>
+        'Return confirmed — ${result.equipmentName} is back in the available pool.',
+      'damaged' =>
+        '${result.equipmentName} flagged as damaged. Pulled from the pool until the equipment office marks it fixed.',
+      'needs_repair' =>
+        '${result.equipmentName} sent to repair. Hidden from students until you re-enable it.',
+      _ =>
+        'Return confirmed for ${result.equipmentName}.',
+    };
+    final tone = switch (cond) {
+      'good' => PupColors.mintGreen,
+      _ => PupColors.cyberAmber,
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: tone,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }
 

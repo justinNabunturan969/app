@@ -95,6 +95,19 @@ class Borrowing {
   /// Preserves when the student made the request, even after approval.
   final DateTime requestedAt;
 
+  /// Admin-set condition when the return was verified (migration 0034).
+  /// Null until the admin fills in the return confirmation form.
+  final String? returnCondition;
+
+  /// Free-form notes the admin attached to the return confirmation.
+  final String? returnNotes;
+
+  /// Auth.uid() of the admin who verified the physical return.
+  final String? confirmedBy;
+
+  /// When the admin verified the physical return.
+  final DateTime? confirmedAt;
+
   const Borrowing({
     required this.id,
     required this.equipmentId,
@@ -109,6 +122,10 @@ class Borrowing {
     required this.qrCode,
     this.quantity = 1,
     DateTime? requestedAt,
+    this.returnCondition,
+    this.returnNotes,
+    this.confirmedBy,
+    this.confirmedAt,
   }) : requestedAt = requestedAt ?? borrowDate;
 
   Duration remaining() => returnDate.difference(DateTime.now());
@@ -127,6 +144,10 @@ class Borrowing {
     String? qrCode,
     int? quantity,
     DateTime? requestedAt,
+    String? returnCondition,
+    String? returnNotes,
+    String? confirmedBy,
+    DateTime? confirmedAt,
   }) {
     return Borrowing(
       id: id ?? this.id,
@@ -142,6 +163,10 @@ class Borrowing {
       qrCode: qrCode ?? this.qrCode,
       quantity: quantity ?? this.quantity,
       requestedAt: requestedAt ?? this.requestedAt,
+      returnCondition: returnCondition ?? this.returnCondition,
+      returnNotes: returnNotes ?? this.returnNotes,
+      confirmedBy: confirmedBy ?? this.confirmedBy,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
     );
   }
 }

@@ -20,6 +20,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   static const _selectWithJoins =
       'id, equipment_id, student_id, status, purpose, quantity, requested_at, '
       'borrowed_at, due_at, returned_at, '
+      'return_condition, return_notes, confirmed_by, confirmed_at, '
       'equipment:equipment!borrowings_equipment_id_fkey ( id, name ), '
       'student:profiles!borrowings_student_id_fkey ( id, student_id, full_name )';
 
@@ -54,6 +55,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     final borrowedAt = DateTime.tryParse((row['borrowed_at'] as String?) ?? '');
     final dueAt = DateTime.tryParse((row['due_at'] as String?) ?? '');
     var returnedAt = DateTime.tryParse((row['returned_at'] as String?) ?? '');
+    final confirmedAt = DateTime.tryParse((row['confirmed_at'] as String?) ?? '');
 
     final status = _parseStatus((row['status'] as String?) ?? 'pending');
 
@@ -86,6 +88,10 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       qrCode: row['id'] as String,
       quantity: (row['quantity'] as int?) ?? 1,
       requestedAt: requestedAt ?? borrowDate,
+      returnCondition: row['return_condition'] as String?,
+      returnNotes: row['return_notes'] as String?,
+      confirmedBy: row['confirmed_by'] as String?,
+      confirmedAt: confirmedAt,
     );
   }
 
@@ -243,12 +249,23 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
 
   /// Admin-only: verify the physical return of a loan. The inventory was
   /// already credited when the student submitted the return request
-  /// (migration 0032), so this is now a pure status transition.
+  /// (migration 0032), so this is now a pure status transition. The
+  /// [condition] (required) and [notes] (optional) are recorded on the
+  /// borrowing as part of the audit trail (migration 0034).
   @override
-  Future<void> confirmReturn(String id) async {
+  Future<void> confirmReturn(
+    String id, {
+    required String condition,
+    String? notes,
+  }) async {
     await _client.rpc(
       'transition_borrowing',
-      params: {'p_borrowing_id': id, 'p_action': 'confirm_return'},
+      params: {
+        'p_borrowing_id': id,
+        'p_action': 'confirm_return',
+        'p_condition': condition,
+        'p_notes': notes,
+      },
     );
   }
 

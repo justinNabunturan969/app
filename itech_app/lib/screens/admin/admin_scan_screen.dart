@@ -157,13 +157,20 @@ class _AdminScanScreenState extends State<AdminScanScreen>
 
   void _markReturned(StudentDashboardController ctrl, Borrowing b) {
     HapticFeedback.lightImpact();
-    // Admin verifies the physical hand-in. This is the transition that
-    // credits inventory (migration 0014) — the student's own tap only
-    // puts the loan into the `return_requested` state.
+    // Admin verifies the physical hand-in via the NFC scan flow. The
+    // scan path is the fast / high-throughput one (staff tap a card and
+    // accept the return in a single motion), so we default the
+    // condition to 'good' with no notes — if anything is off, the
+    // admin can re-open the borrowing from the dashboard's Confirm
+    // Returns section and re-record it. Migration 0034 made the
+    // `condition` parameter required; we hardcode it here for the
+    // happy path.
     unawaited(
-      ctrl.confirmReturnBorrowing(b.id).then((ok) {
+      ctrl
+          .confirmReturnBorrowing(b.id, condition: 'good')
+          .then((result) {
         if (!mounted) return;
-        if (ok) {
+        if (result != null) {
           setState(() {
             _lastScanned = null;
             _recentScans.remove(b);

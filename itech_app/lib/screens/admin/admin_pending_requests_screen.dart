@@ -6,6 +6,7 @@ import '../../app/theme_menu_button.dart';
 import '../../student/models.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import 'widgets/return_confirmation_sheet.dart';
 
 /// Admin Pending Requests — the equipment office's review queue.
 ///
@@ -264,49 +265,49 @@ class _AdminPendingRequestsScreenState
   }
 
   /// Admin confirms the physical hand-in of a `return_requested` loan.
-  /// This is the transition that credits equipment availability
-  /// (migration 0014).
+  /// Opens the structured return confirmation form so the admin has to
+  /// record a condition (good / damaged / needs_repair) before the loan
+  /// is closed out. The form is shared with the admin dashboard's
+  /// "Confirm Returns" section so the audit trail is consistent.
   Future<void> _confirmVerifyReturn(
     BuildContext context,
     StudentDashboardController ctrl,
     Borrowing b,
   ) async {
     HapticFeedback.lightImpact();
-    final ok = await showDialog<bool>(
+    final result = await showModalBottomSheet<Borrowing?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Verify return?'),
-        content: Text(
-          "Confirm that ${b.studentName} has physically returned "
-          '${b.equipmentName}? The item will be marked as available again.',
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ReturnConfirmationSheet(
+        borrowing: b,
+        onSubmit: ({required condition, notes}) => ctrl.confirmReturnBorrowing(
+          b.id,
+          condition: condition.value,
+          notes: notes,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: PupColors.mintGreen,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Verify Return'),
-          ),
-        ],
       ),
     );
-    if (ok != true) return;
-    final verified = await ctrl.confirmReturnBorrowing(b.id);
     if (!context.mounted) return;
+    if (result == null) return;
+    final cond = result.returnCondition;
+    final msg = switch (cond) {
+      'good' =>
+        'Return confirmed — ${result.equipmentName} is back in the available pool.',
+      'damaged' =>
+        '${result.equipmentName} flagged as damaged. Pulled from the pool until the equipment office marks it fixed.',
+      'needs_repair' =>
+        '${result.equipmentName} sent to repair. Hidden from students until you re-enable it.',
+      _ => 'Return confirmed for ${result.equipmentName}.',
+    };
+    final tone = switch (cond) {
+      'good' => PupColors.mintGreen,
+      _ => PupColors.cyberAmber,
+    };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          verified
-              ? 'Return verified — ${b.equipmentName} is available again.'
-              : 'Could not verify this return. Please refresh and try again.',
-        ),
-        backgroundColor: verified ? null : PupColors.signalRed,
+        content: Text(msg),
+        backgroundColor: tone,
         behavior: SnackBarBehavior.floating,
       ),
     );

@@ -49,9 +49,14 @@ abstract class BorrowingsRepository {
   Future<void> cancelPending(String id);
 
   /// Admin: verify the physical return of a loan (or a pending return
-  /// request). This is the transition that credits inventory on the
-  /// Supabase backend (migration 0014).
-  Future<void> confirmReturn(String id);
+  /// request). Records the [condition] and optional [notes] as part of
+  /// the audit trail (migration 0034). `condition` must be one of
+  /// 'good', 'damaged', or 'needs_repair'.
+  Future<void> confirmReturn(
+    String id, {
+    required String condition,
+    String? notes,
+  });
 
   // ── Admin actions ───────────────────────────────────────────────────
   Future<void> approve(String id);
@@ -169,10 +174,15 @@ class MockBorrowingsRepository implements BorrowingsRepository {
 
   // ── Admin: verify a physical return ────────────────────────────────
   @override
-  Future<void> confirmReturn(String id) async {
+  Future<void> confirmReturn(
+    String id, {
+    required String condition,
+    String? notes,
+  }) async {
     // The mock treats the student's return tap as final (no verification
     // step offline), so this only needs to catch loans still sitting in
-    // the active/overdue lists.
+    // the active/overdue lists. The condition / notes are accepted for
+    // API parity with the Supabase implementation but ignored in-memory.
     await returnBorrowing(id);
   }
 
