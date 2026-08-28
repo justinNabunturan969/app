@@ -227,8 +227,7 @@ class StudentDashboardController extends ChangeNotifier {
       final seen = <String>{};
       final merged = <ActivityEntry>[];
       for (final entry in [...restored, ..._activity]) {
-        final key =
-            '${entry.title}|${entry.timestamp.millisecondsSinceEpoch}';
+        final key = '${entry.title}|${entry.timestamp.millisecondsSinceEpoch}';
         if (seen.add(key)) merged.add(entry);
       }
       _activity
@@ -248,7 +247,9 @@ class StudentDashboardController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         _activityPrefsKey,
-        jsonEncode(_activity.take(_activityMaxEntries).map(_activityToJson).toList()),
+        jsonEncode(
+          _activity.take(_activityMaxEntries).map(_activityToJson).toList(),
+        ),
       );
     } catch (e) {
       debugPrint('Failed to persist activity log: $e');
@@ -406,8 +407,7 @@ class StudentDashboardController extends ChangeNotifier {
       icon: Icons.logout_rounded,
       tone: PupColors.signalRed,
       title: 'Forced logout: ${fullName ?? studentId ?? profileId}',
-      subtitle:
-          '${studentId ?? profileId} • Terminated from Login History',
+      subtitle: '${studentId ?? profileId} • Terminated from Login History',
     );
     notifyListeners();
     unawaited(loadLoginHistory());
@@ -903,9 +903,14 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
-  /// Student taps "return": the return is confirmed immediately (no admin
-  /// verification step). The repository calls `confirm_return` directly,
-  /// which marks the row `returned` and credits inventory atomically.
+  /// Student taps "return": the borrowing is moved to `return_requested` and
+  /// inventory is credited immediately (migration 0032). The row stays in
+  /// the active bucket (the repository's `getActive` filter includes
+  /// `return_requested`) but its status pill flips to "Return pending" and
+  /// the Extend/Return buttons disappear (the UI gates those on
+  /// `active || overdue` only). The admin later verifies the physical
+  /// hand-in via `confirmReturnBorrowing`, which is the transition that
+  /// moves the row to history.
   Future<bool> returnBorrowing(String id) async {
     try {
       await bundle.borrowings.returnBorrowing(id);
@@ -913,17 +918,23 @@ class StudentDashboardController extends ChangeNotifier {
       // what the DB now has. Cheaper than a full reload.
       final updated = await bundle.borrowings.getById(id);
       if (updated == null) return false;
-      _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
-      _overdueBorrowings = _overdueBorrowings
-          .where((b) => b.id != id)
-          .toList();
-      _historyBorrowings = [updated, ..._historyBorrowings];
+      // Replace the existing row in place (it stays in the active bucket;
+      // only its status changes to returnRequested). We do NOT move it to
+      // history yet — that happens when the admin confirms the return.
+      _activeBorrowings = [
+        for (final b in _activeBorrowings)
+          if (b.id == id) updated else b,
+      ];
+      _overdueBorrowings = [
+        for (final b in _overdueBorrowings)
+          if (b.id == id) updated else b,
+      ];
       _log(
         scope: ActivityScope.student,
         icon: Icons.assignment_return_rounded,
-        tone: PupColors.mintGreen,
-        title: 'Returned: ${updated.equipmentName}',
-        subtitle: 'On time • Thank you!',
+        tone: PupColors.cyberAmber,
+        title: 'Return requested: ${updated.equipmentName}',
+        subtitle: 'Awaiting admin verification',
       );
       notifyListeners();
       return true;
@@ -937,8 +948,9 @@ class StudentDashboardController extends ChangeNotifier {
   }
 
   /// Admin verifies the physical return of a loan or a pending return
-  /// request. This is the transition that credits inventory on the
-  /// backend (migration 0014). Moves the borrowing into history with
+  /// request. Inventory was already credited when the student submitted
+  /// `request_return` (migration 0032), so this is now a pure status
+  /// transition that moves the borrowing into history with
   /// status=returned.
   Future<bool> confirmReturnBorrowing(String id) async {
     try {

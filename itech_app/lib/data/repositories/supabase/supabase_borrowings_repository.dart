@@ -228,21 +228,22 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     return _loadRpcBorrowing(row);
   }
 
-  /// Student taps "return": the return is confirmed IMMEDIATELY — no
-  /// admin verification step. We call `confirm_return` directly, which
-  /// marks the row `returned` and credits `equipment.available_count`
-  /// (migration 0014) in one atomic transition. The legacy
-  /// `request_return` intermediate state is skipped for now.
+  /// Student taps "return": the borrowing moves into the `return_requested`
+  /// intermediate state. Inventory is credited at this step (migration 0032)
+  /// so the item is borrowable again immediately and the same student can
+  /// re-request it. The admin's `confirmReturn` later just finalises the
+  /// closure (`return_requested` -> `returned`) without touching the count.
   @override
   Future<void> returnBorrowing(String id) async {
     await _client.rpc(
       'transition_borrowing',
-      params: {'p_borrowing_id': id, 'p_action': 'confirm_return'},
+      params: {'p_borrowing_id': id, 'p_action': 'request_return'},
     );
   }
 
-  /// Admin-only: verify the physical return. This is the transition that
-  /// actually credits `equipment.available_count` (see migration 0014).
+  /// Admin-only: verify the physical return of a loan. The inventory was
+  /// already credited when the student submitted the return request
+  /// (migration 0032), so this is now a pure status transition.
   @override
   Future<void> confirmReturn(String id) async {
     await _client.rpc(
