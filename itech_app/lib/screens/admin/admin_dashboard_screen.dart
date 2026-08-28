@@ -50,8 +50,13 @@ class AdminDashboardScreen extends StatelessWidget {
         final pending = ctrl.pendingBorrowings;
         final activity = ctrl.activity
             .where((a) => a.scope == ActivityScope.admin)
-            .take(5)
-            .toList();
+            .toList()
+          // Sort newest-first by the entry's real timestamp so the feed
+          // always reads as a chronological log, regardless of the order
+          // events were folded in (realtime diffs, login history, local
+          // CRUD ops can all interleave).
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        final visibleActivity = activity.take(8).toList();
 
         return Scaffold(
           body: SafeArea(
@@ -324,7 +329,7 @@ class AdminDashboardScreen extends StatelessWidget {
                                   icon: Icons.qr_code_scanner_rounded,
                                   onTap: onSwitchTab == null
                                       ? null
-                                      : () => onSwitchTab!(3),
+                                      : () => onSwitchTab!(4),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -349,7 +354,7 @@ class AdminDashboardScreen extends StatelessWidget {
                           // Recent activity
                           ActivityFeedHeader(
                             trailing: Text(
-                              'Last 24h',
+                              '${activity.length} events',
                               style: TextStyle(
                                 color: subtleText,
                                 fontWeight: FontWeight.w700,
@@ -358,13 +363,13 @@ class AdminDashboardScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          if (activity.isEmpty)
+                          if (visibleActivity.isEmpty)
                             const EmptyActivityHint(
                               label: 'No recent activity yet',
                               icon: Icons.history_toggle_off_rounded,
                             )
                           else
-                            for (final entry in activity)
+                            for (final entry in visibleActivity)
                               ActivityFeedItem(
                                 icon: entry.icon,
                                 tone: entry.tone,

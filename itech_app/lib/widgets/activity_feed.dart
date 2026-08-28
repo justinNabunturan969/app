@@ -19,14 +19,20 @@ class ActivityFeedItem extends StatelessWidget {
   final String subtitle;
   final DateTime timestamp;
 
-  String _formatTime(DateTime t) {
-    final now = DateTime.now();
-    final diff = now.difference(t);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${t.month}/${t.day}';
+  /// Absolute, permanent date stamp — e.g. "Aug 28, 2026 · 2:45 PM".
+  /// Unlike a relative "2h ago" label, this never changes or loses
+  /// meaning as the entry ages, so the feed reads as a proper log.
+  String _formatTimestamp(DateTime t) {
+    final local = t.toLocal();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final amPm = local.hour < 12 ? 'AM' : 'PM';
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${months[local.month - 1]} ${local.day}, ${local.year} · '
+        '$hour12:$minute $amPm';
   }
 
   @override
@@ -86,11 +92,11 @@ class ActivityFeedItem extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _formatTime(timestamp),
+                      _formatTimestamp(timestamp),
                       style: TextStyle(
                         color: subtleText,
                         fontWeight: FontWeight.w700,
-                        fontSize: 10.5,
+                        fontSize: 10,
                       ),
                     ),
                   ],
