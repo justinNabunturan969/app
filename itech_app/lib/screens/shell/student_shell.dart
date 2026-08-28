@@ -6,6 +6,7 @@ import '../../app/language_controller.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/responsive_scaffold.dart';
+import '../../widgets/skeleton_loading_view.dart';
 
 import '../student/student_borrowings_screen.dart';
 import '../student/student_home_screen.dart';
@@ -157,29 +158,7 @@ class _LoadingScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tint = isDark ? PupColors.cyberAmber : PupColors.signalRed;
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: tint),
-            const SizedBox(height: 14),
-            Text(
-              'Loading from Supabase…',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).hintColor,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const SkeletonLoadingView();
   }
 }
 
