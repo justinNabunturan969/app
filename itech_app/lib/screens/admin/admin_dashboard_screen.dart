@@ -48,14 +48,26 @@ class AdminDashboardScreen extends StatelessWidget {
         final pendingCount = ctrl.pendingRequestsCount;
         final overdueCount = ctrl.overdueCount;
         final pending = ctrl.pendingBorrowings;
-        final activity = ctrl.activity
-            .where((a) => a.scope == ActivityScope.admin)
+        // Loans waiting for an admin's Confirm Return to credit inventory:
+        // anything the student marked for return, plus active/overdue loans
+        // the admin may need to confirm manually (e.g. physical hand-in
+        // without a student-side tap).
+        final returnRequests = ctrl.activeBorrowings
+            .where(
+              (b) =>
+                  b.status == BorrowingStatus.returnRequested ||
+                  b.status == BorrowingStatus.active ||
+                  b.status == BorrowingStatus.overdue,
+            )
             .toList()
-          // Sort newest-first by the entry's real timestamp so the feed
-          // always reads as a chronological log, regardless of the order
-          // events were folded in (realtime diffs, login history, local
-          // CRUD ops can all interleave).
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          ..sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
+        final activity =
+            ctrl.activity.where((a) => a.scope == ActivityScope.admin).toList()
+              // Sort newest-first by the entry's real timestamp so the feed
+              // always reads as a chronological log, regardless of the order
+              // events were folded in (realtime diffs, login history, local
+              // CRUD ops can all interleave).
+              ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         final visibleActivity = activity.take(8).toList();
 
         return Scaffold(
@@ -232,6 +244,76 @@ class AdminDashboardScreen extends StatelessWidget {
                                               : 'Could not reject the request. Please try again.',
                                         ),
                                         backgroundColor: rejected
+                                            ? null
+                                            : PupColors.signalRed,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                          const SizedBox(height: 16),
+
+                          // Confirm Returns — loans waiting for the admin
+                          // to confirm the physical hand-in. Confirming
+                          // credits equipment availability immediately.
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: _SectionHeader(
+                                  title: 'Confirm Returns',
+                                  icon: Icons.assignment_return_rounded,
+                                  accent: PupColors.techCyan,
+                                ),
+                              ),
+                              if (returnRequests.isNotEmpty &&
+                                  onSwitchTab != null)
+                                TextButton(
+                                  onPressed: () => onSwitchTab!(3),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: PupColors.techCyan,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'See all',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (returnRequests.isEmpty)
+                            const EmptyActivityHint(
+                              label: 'No returns to confirm — all clear!',
+                              icon: Icons.assignment_turned_in_rounded,
+                            )
+                          else
+                            for (final b in returnRequests.take(3))
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _ReturnConfirmCard(
+                                  borrowing: b,
+                                  onConfirm: () async {
+                                    HapticFeedback.lightImpact();
+                                    final confirmed = await ctrl
+                                        .confirmReturnBorrowing(b.id);
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          confirmed
+                                              ? 'Return confirmed — ${b.equipmentName} is available again.'
+                                              : 'Could not confirm this return. Please refresh and try again.',
+                                        ),
+                                        backgroundColor: confirmed
                                             ? null
                                             : PupColors.signalRed,
                                       ),
@@ -1203,6 +1285,183 @@ class _LivePulsingDotState extends State<_LivePulsingDot>
           ),
         );
       },
+    );
+  }
+}
+
+/// Compact "Confirm Returns" card shown on the admin dashboard for each
+/// loan in the `return_requested` state (plus active/overdue rows the
+/// admin can close out manually if the student never tapped Return). Tapping
+/// the action button calls [onConfirm] — the parent wires that to
+/// `StudentDashboardController.confirmReturnBorrowing`.
+class _ReturnConfirmCard extends StatelessWidget {
+  const _ReturnConfirmCard({
+    required this.borrowing,
+    required this.onConfirm,
+  });
+
+  final Borrowing borrowing;
+  final VoidCallback onConfirm;
+
+  ({Color tone, IconData icon, String label}) get _statusStyle {
+    switch (borrowing.status) {
+      case BorrowingStatus.returnRequested:
+        return (
+          tone: PupColors.techCyan,
+          icon: Icons.assignment_return_rounded,
+          label: 'Return pending',
+        );
+      case BorrowingStatus.overdue:
+        return (
+          tone: PupColors.signalRed,
+          icon: Icons.warning_amber_rounded,
+          label: 'Overdue',
+        );
+      case BorrowingStatus.active:
+      default:
+        return (
+          tone: PupColors.cyberAmber,
+          icon: Icons.bolt_rounded,
+          label: 'Active',
+        );
+    }
+  }
+
+  String get _initials {
+    final parts = borrowing.studentName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
+    final subtleText = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+        : PupColors.ashGray;
+
+    final style = _statusStyle;
+
+    return Container(
+      decoration: PupGlass.statCardGlow(
+        context: context,
+        accent: style.tone,
+        borderRadius: 16,
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: style.tone.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: style.tone.withValues(alpha: 0.45),
+                    width: 1.1,
+                  ),
+                ),
+                child: Text(
+                  _initials,
+                  style: TextStyle(
+                    color: style.tone,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      borrowing.studentName,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${borrowing.studentId}  •  ${borrowing.equipmentName}',
+                      style: TextStyle(
+                        color: subtleText,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10.5,
+                        letterSpacing: 0.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: style.tone.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: style.tone.withValues(alpha: 0.4),
+                    width: 0.8,
+                  ),
+                ),
+                child: Text(
+                  style.label,
+                  style: TextStyle(
+                    color: style.tone,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 9,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onConfirm,
+              icon: const Icon(Icons.verified_rounded, size: 16),
+              label: const Text(
+                'Verify Return',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: PupColors.mintGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
