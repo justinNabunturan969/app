@@ -41,4 +41,35 @@ void main() {
   test('accepts Supabase default six-character passwords', () {
     expect(AuthValidators.validatePassword('admin1'), isNull);
   });
+
+  test('new passwords need capital, special char, and three digits', () {
+    // Missing capital letter.
+    expect(
+      AuthValidators.validateNewPassword('abcdef123!'),
+      'Use at least one capital letter.',
+    );
+    // Fewer than three digits.
+    expect(
+      AuthValidators.validateNewPassword('Abcdefgh!'),
+      'Use at least three numbers.',
+    );
+    expect(
+      AuthValidators.validateNewPassword('Abcdefg1!'),
+      'Use at least three numbers.',
+    );
+    // Missing special character.
+    expect(
+      AuthValidators.validateNewPassword('Abcdefg123'),
+      'Use at least one special character.',
+    );
+    // Too short, even when every other rule is satisfied.
+    expect(
+      AuthValidators.validateNewPassword('Ab1!12'),
+      'Password must be at least 8 characters.',
+    );
+    // Valid password meets all requirements.
+    expect(AuthValidators.validateNewPassword('Abcdef123!'), isNull);
+    // Special characters include symbols beyond punctuation.
+    expect(AuthValidators.validateNewPassword('Xyz912ab#'), isNull);
+  });
 }

@@ -82,8 +82,35 @@ supabase db pull          # optional: reconcile hotfixes made in the dashboard
 ## Security & auth policy notes
 
 **Password policy.** The client requires 8+ characters with at least one
-letter and one digit for NEW passwords (`AuthValidators.validateNewPassword`,
+capital letter, at least one special character, and at least three digits
+for NEW passwords (`AuthValidators.validateNewPassword`,
 used on sign-up and reset); login still accepts legacy 6-character accounts.
+
+**Admin account recovery.** Users can never self-create an admin role:
+`profiles.role` defaults to `student`, the `profiles_insert_self` policy
+(migration 0015) only accepts `role = 'student'`, and the
+`prevent_self_role_change` trigger (migration 0003) blocks self-promotion.
+Admin promotion happens exclusively via SQL run as `postgres` (SQL Editor /
+migration). If the admin auth user is accidentally deleted (the profile row
+cascades with it), recover as follows:
+
+1. Dashboard → Authentication → Users → Add user — same admin email, strong
+   password, Auto Confirm User enabled.
+2. SQL Editor:
+   ```sql
+   insert into public.profiles (id, email, role)
+   select u.id, u.email, 'admin'
+   from auth.users u
+   where lower(u.email) = 'admin@pup.edu.ph'
+   on conflict (id) do update set role = 'admin';
+   ```
+   (`on conflict` upgrades the row to admin if the app's bootstrap already
+   recreated it as a student.) Re-running `seed_admin_and_demo.sql` alone is
+   NOT enough after a deletion — it only UPDATEs existing rows.
+3. Verify: `select email, role from public.profiles where role = 'admin';`
+
+Keep TWO admin accounts so a single deletion never locks admin workflows,
+and keep both emails in the allow-list in `seed_admin_and_demo.sql`.
 Also enable **Leaked password protection** server-side:
 *Dashboard → Authentication → Policies → Leaked password protection.*
 

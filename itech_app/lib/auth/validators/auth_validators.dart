@@ -63,12 +63,21 @@ class AuthValidators {
   /// the stronger bar. Also enable "Leaked password protection" in the
   /// Supabase dashboard (Authentication -> Policies) for HaveIBeenPwned
   /// checks server-side — see SUPABASE_SETUP.md.
+  ///
+  /// Requirements: at least 8 characters, at least one capital letter,
+  /// at least one special character, and at least three numbers.
   static String? validateNewPassword(String? value) {
     final v = value ?? '';
     if (v.isEmpty) return 'Password is required.';
     if (v.length < 8) return 'Password must be at least 8 characters.';
-    if (!RegExp(r'[A-Za-z]').hasMatch(v) || !RegExp(r'\d').hasMatch(v)) {
-      return 'Use at least one letter and one number.';
+    if (!RegExp(r'[A-Z]').hasMatch(v)) {
+      return 'Use at least one capital letter.';
+    }
+    if (RegExp(r'\d').allMatches(v).length < 3) {
+      return 'Use at least three numbers.';
+    }
+    if (!RegExp(r'[^A-Za-z0-9]').hasMatch(v)) {
+      return 'Use at least one special character.';
     }
     return null;
   }
