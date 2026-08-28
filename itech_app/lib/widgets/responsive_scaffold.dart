@@ -10,11 +10,18 @@ class ShellTab {
     required this.label,
     required this.icon,
     required this.selectedIcon,
+    this.badgeCount = 0,
   });
 
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+
+  /// When > 0, a red pill badge with this count is drawn on the tab's
+  /// icon in both the bottom-nav and the rail. Tabs that don't need a
+  /// badge simply leave it at 0. The shell decides what the count means
+  /// (e.g. pending borrow requests, unseen login events).
+  final int badgeCount;
 }
 
 /// A scaffold that switches between a `BottomNavigationBar` (narrow /
@@ -156,9 +163,14 @@ class _NarrowScaffold extends StatelessWidget {
       final tab = tabs[i];
       final selected = i == currentIndex;
       Widget icon = Icon(selected ? tab.selectedIcon : tab.icon);
-      if (i == tabs.length - 1 &&
-          unreadCount > 0 &&
-          tab.label.toLowerCase().contains('notif')) {
+      // Per-tab badge (admin shell sets badgeCount on specific tabs), with
+      // a fallback for the notifications tab driven by `unreadCount` so the
+      // student shell keeps its existing behavior without per-tab counts.
+      final isNotifTab = tab.label.toLowerCase().contains('notif');
+      final count = tab.badgeCount > 0
+          ? tab.badgeCount
+          : (isNotifTab && i == tabs.length - 1 ? unreadCount : 0);
+      if (count > 0) {
         icon = Stack(
           clipBehavior: Clip.none,
           children: [
@@ -173,7 +185,7 @@ class _NarrowScaffold extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  unreadCount > 9 ? '9+' : '$unreadCount',
+                  count > 9 ? '9+' : '$count',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
@@ -322,16 +334,21 @@ class _WideScaffold extends StatelessWidget {
                       itemBuilder: (context, i) {
                         final tab = tabs[i];
                         final selected = i == currentIndex;
+                        final isNotifTab = tab.label
+                            .toLowerCase()
+                            .contains('notif');
+                        final count = tab.badgeCount > 0
+                            ? tab.badgeCount
+                            : (isNotifTab && i == tabs.length - 1
+                                  ? unreadCount
+                                  : 0);
                         return _RailTile(
                           tab: tab,
                           selected: selected,
                           activeColor: activeColor,
                           unselectedColor: unselectedColor,
-                          showBadge:
-                              i == tabs.length - 1 &&
-                              unreadCount > 0 &&
-                              tab.label.toLowerCase().contains('notif'),
-                          badgeCount: unreadCount,
+                          showBadge: count > 0,
+                          badgeCount: count,
                           onTap: () => onTabTap(i),
                         );
                       },

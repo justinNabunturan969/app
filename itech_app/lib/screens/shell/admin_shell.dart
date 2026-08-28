@@ -29,7 +29,17 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
 
-  static List<ShellTab> _tabs(AppCopy copy) => [
+  /// Newest `session_history` timestamp the admin has actually seen on
+  /// the History tab. Anything newer drives the red-dot badge on the
+  /// History tab (logins, sign-outs, force-logouts). Starts at "now"
+  /// so a fresh app install doesn't badge the entire backlog.
+  DateTime _historyLastSeen = DateTime.now();
+
+  static List<ShellTab> _tabs(
+    AppCopy copy, {
+    required int pendingCount,
+    required int unseenHistoryCount,
+  }) => [
     ShellTab(
       label: copy.dashboard,
       icon: Icons.dashboard_outlined,
@@ -39,6 +49,7 @@ class _AdminShellState extends State<AdminShell> {
       label: 'History',
       icon: Icons.history_edu_outlined,
       selectedIcon: Icons.history_edu_rounded,
+      badgeCount: unseenHistoryCount,
     ),
     ShellTab(
       label: copy.inventory,
@@ -49,6 +60,7 @@ class _AdminShellState extends State<AdminShell> {
       label: copy.pending,
       icon: Icons.pending_actions_outlined,
       selectedIcon: Icons.pending_actions_rounded,
+      badgeCount: pendingCount,
     ),
     ShellTab(
       label: copy.scan,
@@ -71,13 +83,45 @@ class _AdminShellState extends State<AdminShell> {
       builder: (context, _) {
         final ctrl = context.watch<StudentDashboardController>();
         final copy = AppCopy(context.watch<LanguageController>().language);
+
+        // ── Badge counts ──────────────────────────────────────────────
+        // Pending tab: live count of pending borrow requests (realtime).
+        final pendingCount = ctrl.pendingRequestsCount;
+        // History tab: session_history rows (login / sign-out /
+        // force-logout) newer than the last time the admin opened the
+        // History tab. The realtime subscription keeps `loginHistory`
+        // fresh, so this updates the moment an event lands.
+        final unseenHistoryCount = ctrl.loginHistory
+            .where((e) => e.endedAt.isAfter(_historyLastSeen))
+            .length;
+
         return ResponsiveScaffold(
           currentIndex: _index,
-          tabs: _tabs(copy),
+          tabs: _tabs(
+            copy,
+            pendingCount: pendingCount,
+            unseenHistoryCount: unseenHistoryCount,
+          ),
           unreadCount: ctrl.unreadCount,
           onTabTap: (i) {
             if (i == _index) return;
             HapticFeedback.selectionClick();
+            // Visiting the History tab clears its badge — the admin has
+            // now seen everything up to the newest recorded session.
+            if (i == 1) {
+              final newest = ctrl.loginHistory.isEmpty
+                  ? null
+                  : ctrl.loginHistory
+                        .map((e) => e.endedAt)
+                        .reduce((a, b) => a.isAfter(b) ? a : b);
+              setState(() {
+                _index = i;
+                if (newest != null) _historyLastSeen = newest;
+              });
+              // Make sure the history feed is armed / fresh.
+              ctrl.loadLoginHistory();
+              return;
+            }
             setState(() => _index = i);
           },
           body: AnimatedSwitcher(

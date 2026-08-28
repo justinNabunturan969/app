@@ -187,9 +187,25 @@ class StudentDashboardController extends ChangeNotifier {
   int _unread = 0;
   int get unreadCount => _unread;
 
-  // ── Activity log (local, derived from each CRUD op) ──────────────────
-  final List<ActivityEntry> _activity = List.of(StudentMockData.activity);
+  // ── Activity log ─────────────────────────────────────────────────────
+  // Starts EMPTY — no mock seed. Admin-scope entries are derived from the
+  // *real* realtime streams (borrowings + session_history) in
+  // [_rebuildAdminActivity], and student-scope entries are appended by
+  // [_log] whenever this device performs a CRUD op. The admin feed
+  // therefore reflects what actually happened in the database across all
+  // devices, not a hardcoded simulation.
+  final List<ActivityEntry> _activity = [];
   List<ActivityEntry> get activity => List.unmodifiable(_activity);
+
+  /// Previous borrowings snapshot keyed by id → status, used to detect
+  /// realtime transitions (new pending request, approval, rejection,
+  /// return) and turn them into activity entries.
+  final Map<String, BorrowingStatus> _lastBorrowingStatuses = {};
+  bool _borrowingStatusesPrimed = false;
+
+  /// Newest session_history timestamp already folded into the activity
+  /// feed, so login/sign-out events aren't duplicated on every re-emit.
+  DateTime? _lastSeenSessionAt;
 
   /// Borrowed-unit totals for the current Monday–Sunday week. The values are
   /// derived from the same live borrowing stream that powers the dashboards,
@@ -438,6 +454,9 @@ class StudentDashboardController extends ChangeNotifier {
       (entries) {
         _loginHistory = entries;
         _loginHistoryError = null;
+        // Feed the admin dashboard's Recent Activity with the real
+        // login / sign-out / force-logout events that just landed.
+        _foldLoginHistoryIntoActivity(entries);
         notifyListeners();
       },
       onError: (Object error, StackTrace stackTrace) {
@@ -608,6 +627,129 @@ class StudentDashboardController extends ChangeNotifier {
               b.status == BorrowingStatus.cancelled,
         )
         .toList(growable: false);
+    _diffBorrowingsIntoActivity(all);
+  }
+
+  /// Compares the freshly-emitted borrowings snapshot against the previous
+  /// one and appends a real activity entry for every meaningful transition:
+  ///   - new `pending` row          → "requested to borrow"
+  ///   - pending → active           → "request approved"
+  ///   - pending → rejected         → "request rejected"
+  ///   - active/overdue → returned  → "item returned"
+  ///   - pending → cancelled        → "request cancelled"
+  /// The first emit only primes the map so the initial snapshot doesn't
+  /// flood the feed with the entire table history.
+  void _diffBorrowingsIntoActivity(List<Borrowing> all) {
+    if (!_borrowingStatusesPrimed) {
+      _lastBorrowingStatuses
+        ..clear()
+        ..addEntries(all.map((b) => MapEntry(b.id, b.status)));
+      _borrowingStatusesPrimed = true;
+      return;
+    }
+    for (final b in all) {
+      final prev = _lastBorrowingStatuses[b.id];
+      _lastBorrowingStatuses[b.id] = b.status;
+      if (prev == b.status) continue;
+      final who = b.studentName.isNotEmpty ? b.studentName : 'A student';
+      final what = b.equipmentName.isNotEmpty ? b.equipmentName : 'an item';
+      switch (b.status) {
+        case BorrowingStatus.pending:
+          _log(
+            scope: ActivityScope.admin,
+            icon: Icons.hourglass_top_rounded,
+            tone: PupColors.cyberAmber,
+            title: 'New borrow request',
+            subtitle: '$who requested to borrow $what',
+            timestamp: b.requestedAt,
+          );
+        case BorrowingStatus.active:
+          _log(
+            scope: ActivityScope.admin,
+            icon: Icons.check_circle_outline_rounded,
+            tone: PupColors.mintGreen,
+            title: 'Request approved',
+            subtitle: '$who is now borrowing $what',
+            timestamp: DateTime.now(),
+          );
+        case BorrowingStatus.rejected:
+          _log(
+            scope: ActivityScope.admin,
+            icon: Icons.cancel_outlined,
+            tone: PupColors.signalRed,
+            title: 'Request rejected',
+            subtitle: '$who\u2019s request for $what was rejected',
+            timestamp: DateTime.now(),
+          );
+        case BorrowingStatus.returned:
+          _log(
+            scope: ActivityScope.admin,
+            icon: Icons.assignment_turned_in_outlined,
+            tone: PupColors.techCyan,
+            title: 'Item returned',
+            subtitle: '$what was returned by $who',
+            timestamp: DateTime.now(),
+          );
+        case BorrowingStatus.cancelled:
+          _log(
+            scope: ActivityScope.admin,
+            icon: Icons.close_rounded,
+            tone: PupColors.ashGray,
+            title: 'Request cancelled',
+            subtitle: '$who cancelled the request for $what',
+            timestamp: DateTime.now(),
+          );
+        default:
+          break;
+      }
+    }
+  }
+
+  /// Folds newly-recorded `session_history` rows (login, sign-out,
+  /// force-logout, expiry) into the admin activity feed. Called from the
+  /// realtime login-history subscription; deduplicated via
+  /// [_lastSeenSessionAt] so re-emitted snapshots don't duplicate rows.
+  void _foldLoginHistoryIntoActivity(List<LoginHistoryEntry> entries) {
+    DateTime? newest;
+    for (final e in entries) {
+      final stamp = e.endedAt;
+      if (_lastSeenSessionAt != null && !stamp.isAfter(_lastSeenSessionAt!)) {
+        continue;
+      }
+      newest = newest == null || stamp.isAfter(newest) ? stamp : newest;
+      final who = e.fullName.isNotEmpty ? e.fullName : e.email;
+      final String title;
+      final IconData icon;
+      final Color tone;
+      switch (e.endReason) {
+        case 'signed_out':
+          title = 'Signed out';
+          icon = Icons.logout_rounded;
+          tone = PupColors.ashGray;
+        case 'force_logout':
+          title = 'Forced logout';
+          icon = Icons.admin_panel_settings_outlined;
+          tone = PupColors.signalRed;
+        case 'expired':
+          title = 'Session expired';
+          icon = Icons.timer_off_outlined;
+          tone = PupColors.cyberAmber;
+        default:
+          // A row with no end reason yet is a live session → a login.
+          title = e.role == 'admin' ? 'Admin signed in' : 'New login';
+          icon = Icons.login_rounded;
+          tone = PupColors.mintGreen;
+      }
+      _log(
+        scope: ActivityScope.admin,
+        icon: icon,
+        tone: tone,
+        title: title,
+        subtitle: '$who · ${e.role == 'admin' ? 'Faculty' : 'Student'}',
+        timestamp: stamp,
+      );
+    }
+    if (newest != null) _lastSeenSessionAt = newest;
   }
 
   /// Wrapped in a separate function so a single failing call doesn't
@@ -937,6 +1079,7 @@ class StudentDashboardController extends ChangeNotifier {
     required Color tone,
     required String title,
     required String subtitle,
+    DateTime? timestamp,
   }) {
     _activity.insert(
       0,
@@ -945,7 +1088,7 @@ class StudentDashboardController extends ChangeNotifier {
         tone: tone,
         title: title,
         subtitle: subtitle,
-        timestamp: DateTime.now(),
+        timestamp: timestamp ?? DateTime.now(),
         scope: scope,
       ),
     );
