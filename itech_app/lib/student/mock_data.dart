@@ -23,6 +23,7 @@ class StudentMockData {
       total: 5,
       description:
           'Professional-grade digital multimeter with auto-ranging and high accuracy.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-2033',
@@ -33,6 +34,7 @@ class StudentMockData {
       total: 6,
       description:
           'General-purpose wrench set suitable for lab equipment maintenance.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-3101',
@@ -43,6 +45,7 @@ class StudentMockData {
       total: 4,
       description:
           'Widely used microcontroller board for prototyping sensors and circuits.',
+      classification: 'computer',
     ),
     const Equipment(
       id: 'E-4017',
@@ -53,6 +56,7 @@ class StudentMockData {
       total: 3,
       description:
           'Compact oscilloscope kit with probes, enabling fast waveform verification.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-5222',
@@ -63,6 +67,7 @@ class StudentMockData {
       total: 4,
       description:
           'Bench power supply for regulating voltage and current during experiments.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-6110',
@@ -73,6 +78,7 @@ class StudentMockData {
       total: 2,
       description:
           'High precision measuring tool for mechanical fabrication tasks.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-7007',
@@ -83,6 +89,7 @@ class StudentMockData {
       total: 2,
       description:
           'Measure inductance, capacitance, and resistance for component characterization.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-8008',
@@ -93,6 +100,7 @@ class StudentMockData {
       total: 2,
       description:
           'Adjustable heat gun for electronics rework and prototyping.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-9020',
@@ -103,6 +111,7 @@ class StudentMockData {
       total: 3,
       description:
           'Probe set for safe and accurate measurement across lab devices.',
+      classification: 'electrical',
     ),
     const Equipment(
       id: 'E-10001',
@@ -113,6 +122,7 @@ class StudentMockData {
       total: 5,
       description:
           'Magnetic screwdriver kit for electronics and mechanical assembly.',
+      classification: 'electrical',
     ),
   ];
 

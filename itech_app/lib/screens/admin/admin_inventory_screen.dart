@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme_menu_button.dart';
+import '../../data/repositories/csv_helper.dart';
 import '../../student/models.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import 'widgets/equipment_form_sheet.dart';
 
 /// Admin Inventory — full equipment catalogue with availability,
 /// category, and location. Search + filter chips; tap a card to view
@@ -20,6 +22,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
   final _searchC = TextEditingController();
   String _query = '';
   int _filter = 0; // 0=All, 1=Available, 2=Low Stock, 3=Out
+  String? _classificationFilter; // null = all, 'electrical', or 'computer'
 
   static const _filters = ['All', 'Available', 'Low Stock', 'Out'];
 
@@ -38,6 +41,10 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
             e.id.toLowerCase().contains(q) ||
             e.category.toLowerCase().contains(q);
         if (!inText) return false;
+      }
+      if (_classificationFilter != null &&
+          e.classification != _classificationFilter) {
+        return false;
       }
       switch (_filter) {
         case 1:
@@ -94,6 +101,44 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                                 ),
                               ),
                             ),
+                            _HeaderIconButton(
+                              icon: Icons.upload_file_rounded,
+                              tooltip: 'Import CSV',
+                              onTap: () => _importCsv(context, ctrl),
+                            ),
+                            const SizedBox(width: 4),
+                            _HeaderIconButton(
+                              icon: Icons.download_rounded,
+                              tooltip: 'Export CSV',
+                              onTap: () => _exportCsv(context, ctrl),
+                            ),
+                            const SizedBox(width: 4),
+                            FilledButton.icon(
+                              onPressed: () => _openAddSheet(context, ctrl),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text(
+                                'Add',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: PupColors.pupMaroon,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             const ThemeMenuButton(),
                           ],
                         ),
@@ -120,6 +165,12 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                           selected: _filter,
                           filters: _filters,
                           onSelected: (i) => setState(() => _filter = i),
+                        ),
+                        const SizedBox(height: 6),
+                        _ClassificationChipsRow(
+                          selected: _classificationFilter,
+                          onSelected: (v) =>
+                              setState(() => _classificationFilter = v),
                         ),
                         const SizedBox(height: 6),
                       ],
@@ -193,7 +244,404 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _EquipmentDetailSheet(equipment: e),
+      builder: (ctx) => _EquipmentDetailSheet(
+        equipment: e,
+        onEdit: () {
+          Navigator.pop(ctx);
+          _openEditSheet(context, e);
+        },
+        onDelete: () async {
+          Navigator.pop(ctx);
+          await _confirmDelete(context, e);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openAddSheet(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    final created = await showModalBottomSheet<Equipment?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => EquipmentFormSheet(
+        equipment: null,
+        onSubmit: (data) => ctrl.createEquipment(
+          code: data.code,
+          name: data.name,
+          category: data.category.isEmpty ? null : data.category,
+          location: data.location.isEmpty ? null : data.location,
+          description: data.description.isEmpty ? null : data.description,
+          totalCount: data.totalCount,
+          classification: data.classification,
+        ),
+      ),
+    );
+    if (created != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${created.name} to inventory.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openEditSheet(
+    BuildContext context,
+    Equipment e,
+  ) async {
+    final ctrl = context.read<StudentDashboardController>();
+    final updated = await showModalBottomSheet<Equipment?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => EquipmentFormSheet(
+        equipment: e,
+        onSubmit: (data) => ctrl.updateEquipment(
+          e.id,
+          code: data.code,
+          name: data.name,
+          category: data.category,
+          location: data.location,
+          description: data.description,
+          totalCount: data.totalCount,
+          availableCount: data.availableCount,
+          classification: data.classification,
+        ),
+      ),
+    );
+    if (updated != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Updated ${updated.name}.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    Equipment e,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove equipment?'),
+        content: Text(
+          'Remove "${e.name}" from the inventory? Active borrowings will '
+          'block this — cancel or verify those first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.signalRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final ctrl = context.read<StudentDashboardController>();
+    final success = await ctrl.deleteEquipment(e.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Removed ${e.name}.'
+              : 'Could not remove ${e.name}. It may be referenced by an active borrowing.',
+        ),
+        backgroundColor: success ? null : PupColors.signalRed,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _exportCsv(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    final items = ctrl.equipment;
+    final header = const [
+      'code',
+      'name',
+      'category',
+      'classification',
+      'location',
+      'total_count',
+      'available_count',
+      'description',
+    ];
+    final rows = items
+        .map(
+          (e) => [
+            e.code,
+            e.name,
+            e.category,
+            e.classification ?? '',
+            e.location,
+            e.total.toString(),
+            e.available.toString(),
+            e.description,
+          ],
+        )
+        .toList();
+    final csv = Csv.encode(header, rows);
+    final fileName =
+        'pup_itech_inventory_${DateTime.now().millisecondsSinceEpoch}.csv';
+    try {
+      await downloadCsvFile(fileName: fileName, content: csv);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not export: $e'),
+          backgroundColor: PupColors.signalRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _importCsv(
+    BuildContext context,
+    StudentDashboardController ctrl,
+  ) async {
+    CsvPickResult? picked;
+    try {
+      picked = await pickCsvFile();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open the file picker: $e'),
+          backgroundColor: PupColors.signalRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (picked == null) return; // user cancelled
+    if (!context.mounted) return;
+
+    final parsed = Csv.parse(picked.content);
+    if (parsed.rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('CSV is empty or has no data rows.'),
+          backgroundColor: PupColors.signalRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final required = const ['code', 'name', 'total_count', 'classification'];
+    final errors = <String>[];
+    final valid = <_ParsedEquipment>[];
+    for (var i = 0; i < parsed.rows.length; i++) {
+      final r = parsed.rows[i];
+      final rowNum = i + 2; // +1 for 1-index, +1 for header
+      final missing = r.missingField(required);
+      if (missing != null) {
+        errors.add('Row $rowNum: missing "$missing"');
+        continue;
+      }
+      final total = int.tryParse((r['total_count'] ?? '').trim());
+      if (total == null || total < 0) {
+        errors.add('Row $rowNum: invalid total_count');
+        continue;
+      }
+      final classification = (r['classification'] ?? '').trim().toLowerCase();
+      if (classification != 'electrical' && classification != 'computer') {
+        errors.add(
+          'Row $rowNum: classification must be "electrical" or "computer"',
+        );
+        continue;
+      }
+      valid.add(_ParsedEquipment(
+        code: (r['code'] ?? '').trim(),
+        name: (r['name'] ?? '').trim(),
+        category: (r['category'] ?? '').trim(),
+        classification: classification,
+        location: (r['location'] ?? '').trim(),
+        totalCount: total,
+        description: (r['description'] ?? '').trim(),
+      ));
+    }
+
+    if (!context.mounted) return;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _CsvImportPreviewDialog(
+        fileName: picked!.fileName,
+        validCount: valid.length,
+        errorCount: errors.length,
+        errors: errors.take(8).toList(),
+      ),
+    );
+    if (proceed != true) return;
+    if (!context.mounted) return;
+
+    var ok = 0;
+    var failed = 0;
+    for (final p in valid) {
+      final created = await ctrl.createEquipment(
+        code: p.code,
+        name: p.name,
+        category: p.category.isEmpty ? null : p.category,
+        location: p.location.isEmpty ? null : p.location,
+        description: p.description.isEmpty ? null : p.description,
+        totalCount: p.totalCount,
+        classification: p.classification,
+      );
+      if (created != null) {
+        ok++;
+      } else {
+        failed++;
+      }
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failed == 0
+              ? 'Imported $ok item(s) from ${picked.fileName}.'
+              : 'Imported $ok item(s); $failed failed (likely duplicate codes).',
+        ),
+        backgroundColor: failed == 0 ? null : PupColors.signalRed,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+class _ParsedEquipment {
+  const _ParsedEquipment({
+    required this.code,
+    required this.name,
+    required this.category,
+    required this.classification,
+    required this.location,
+    required this.totalCount,
+    required this.description,
+  });
+  final String code;
+  final String name;
+  final String category;
+  final String classification;
+  final String location;
+  final int totalCount;
+  final String description;
+}
+
+class _CsvImportPreviewDialog extends StatelessWidget {
+  const _CsvImportPreviewDialog({
+    required this.fileName,
+    required this.validCount,
+    required this.errorCount,
+    required this.errors,
+  });
+  final String fileName;
+  final int validCount;
+  final int errorCount;
+  final List<String> errors;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final subtle = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+        : PupColors.ashGray;
+    return AlertDialog(
+      title: const Text('Import CSV?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('File: $fileName'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: PupColors.mintGreen, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                '$validCount valid row(s) will be imported.',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          if (errorCount > 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_rounded, color: PupColors.signalRed, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '$errorCount row(s) will be skipped:',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: PupColors.signalRed.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: PupColors.signalRed.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: errors
+                    .map(
+                      (e) => Text(
+                        '• $e',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: subtle,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: validCount == 0
+              ? null
+              : () => Navigator.pop(context, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: PupColors.pupMaroon,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Import'),
+        ),
+      ],
     );
   }
 }
@@ -426,7 +874,9 @@ class _InventoryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        equipment.category,
+                        equipment.category.isEmpty
+                            ? (equipment.classification ?? '—')
+                            : equipment.category,
                         style: TextStyle(
                           color: subtleText,
                           fontWeight: FontWeight.w700,
@@ -465,6 +915,36 @@ class _InventoryCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (equipment.classification != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    equipment.classification == 'electrical'
+                        ? Icons.bolt_rounded
+                        : Icons.memory_rounded,
+                    size: 11,
+                    color: equipment.classification == 'electrical'
+                        ? PupColors.cyberAmber
+                        : PupColors.techCyan,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    equipment.classification == 'electrical'
+                        ? 'Electrical'
+                        : 'Computer',
+                    style: TextStyle(
+                      color: equipment.classification == 'electrical'
+                          ? PupColors.cyberAmber
+                          : PupColors.techCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 9.5,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 6),
             Row(
               children: [
@@ -537,8 +1017,14 @@ class _MiniIconChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _EquipmentDetailSheet extends StatelessWidget {
-  const _EquipmentDetailSheet({required this.equipment});
+  const _EquipmentDetailSheet({
+    required this.equipment,
+    required this.onEdit,
+    required this.onDelete,
+  });
   final Equipment equipment;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -613,6 +1099,18 @@ class _EquipmentDetailSheet extends StatelessWidget {
                 label: 'Availability',
                 value: '${equipment.available} of ${equipment.total} available',
               ),
+              if (equipment.classification != null) ...[
+                const SizedBox(height: 10),
+                _DetailRow(
+                  icon: equipment.classification == 'electrical'
+                      ? Icons.bolt_rounded
+                      : Icons.memory_rounded,
+                  label: 'Classification',
+                  value: equipment.classification == 'electrical'
+                      ? 'Electrical item'
+                      : 'Computer item',
+                ),
+              ],
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -637,9 +1135,7 @@ class _EquipmentDetailSheet extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: onEdit,
                       icon: const Icon(Icons.edit_rounded, size: 18),
                       label: const Text(
                         'Edit',
@@ -657,9 +1153,7 @@ class _EquipmentDetailSheet extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: onDelete,
                       icon: const Icon(Icons.delete_outline_rounded, size: 18),
                       label: const Text(
                         'Remove',
@@ -747,6 +1241,139 @@ class _DetailRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Header icon button (small, square, used in the Inventory title row).
+// ─────────────────────────────────────────────────────────────────────────
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+  });
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final fill = isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : PupColors.lightCard;
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : PupColors.ashGray.withValues(alpha: 0.25);
+    final fg = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+
+    final button = Material(
+      color: fill,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(icon, color: fg, size: 18),
+        ),
+      ),
+    );
+    if (tooltip == null) return button;
+    return Tooltip(message: tooltip!, child: button);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Classification filter chips (Electrical / Computer / All).
+// ─────────────────────────────────────────────────────────────────────────
+
+class _ClassificationChipsRow extends StatelessWidget {
+  const _ClassificationChipsRow({
+    required this.selected,
+    required this.onSelected,
+  });
+  final String? selected; // null = all
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final idleBorder = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : PupColors.ashGray.withValues(alpha: 0.3);
+    final idleFg = isDark
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.8)
+        : PupColors.slateGray;
+
+    Widget chip(String? value, String label, IconData icon, Color tone) {
+      final isSelected = selected == value;
+      return InkWell(
+        onTap: () => onSelected(value),
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? tone.withValues(alpha: 0.16)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: isSelected ? tone : idleBorder,
+              width: isSelected ? 1.2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: isSelected ? tone : idleFg),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? tone : idleFg,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 28,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          chip(null, 'All', Icons.all_inclusive_rounded, PupColors.cyberAmber),
+          const SizedBox(width: 6),
+          chip(
+            'electrical',
+            'Electrical',
+            Icons.bolt_rounded,
+            PupColors.cyberAmber,
+          ),
+          const SizedBox(width: 6),
+          chip(
+            'computer',
+            'Computer',
+            Icons.memory_rounded,
+            PupColors.techCyan,
+          ),
+        ],
+      ),
     );
   }
 }

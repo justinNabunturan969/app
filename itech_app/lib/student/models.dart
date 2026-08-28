@@ -31,6 +31,10 @@ class Equipment {
   final String description;
   final bool isLiked;
 
+  /// Top-level grouping the user can filter on: 'electrical' or 'computer'.
+  /// Nullable so legacy rows imported before migration 0033 don't break.
+  final String? classification;
+
   const Equipment({
     required this.id,
     this.code = '',
@@ -41,6 +45,7 @@ class Equipment {
     required this.total,
     required this.description,
     this.isLiked = false,
+    this.classification,
   });
 
   Equipment copyWith({
@@ -53,6 +58,7 @@ class Equipment {
     int? total,
     String? description,
     bool? isLiked,
+    String? classification,
   }) {
     return Equipment(
       id: id ?? this.id,
@@ -64,6 +70,7 @@ class Equipment {
       total: total ?? this.total,
       description: description ?? this.description,
       isLiked: isLiked ?? this.isLiked,
+      classification: classification ?? this.classification,
     );
   }
 }

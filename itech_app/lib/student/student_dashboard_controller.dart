@@ -1074,6 +1074,97 @@ class StudentDashboardController extends ChangeNotifier {
     );
   }
 
+  // ── CRUD: Equipment admin (migration 0033) ────────────────────────────
+  // These hit the equipment table directly; the RLS policy
+  // `equipment_admin_write` already restricts them to `is_admin()`. The
+  // before-insert trigger on `equipment` defaults `available_count` to
+  // `total_count`, so the caller only has to send one number on create.
+
+  /// Admin: create a new equipment row. Returns the persisted record (with
+  /// the server-assigned `id` and `available_count` filled in by the
+  /// trigger). Refreshes the in-memory list on success.
+  Future<Equipment?> createEquipment({
+    required String code,
+    required String name,
+    String? category,
+    String? location,
+    String? description,
+    required int totalCount,
+    String? classification,
+  }) async {
+    try {
+      final created = await bundle.equipment.create(
+        code: code,
+        name: name,
+        category: category,
+        location: location,
+        description: description,
+        totalCount: totalCount,
+        classification: classification,
+      );
+      _equipment = [..._equipment, created]
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      notifyListeners();
+      return created;
+    } catch (e) {
+      debugPrint('createEquipment failed: $e');
+      return null;
+    }
+  }
+
+  /// Admin: update an existing equipment row. Pass only the fields you
+  /// want to change; the rest are left untouched. Returns the updated
+  /// record on success, or `null` if the row is missing / the call
+  /// failed.
+  Future<Equipment?> updateEquipment(
+    String id, {
+    String? code,
+    String? name,
+    String? category,
+    String? location,
+    String? description,
+    int? totalCount,
+    int? availableCount,
+    String? classification,
+  }) async {
+    try {
+      final updated = await bundle.equipment.update(
+        id,
+        code: code,
+        name: name,
+        category: category,
+        location: location,
+        description: description,
+        totalCount: totalCount,
+        availableCount: availableCount,
+        classification: classification,
+      );
+      _equipment = _equipment
+          .map((e) => e.id == id ? updated : e)
+          .toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      notifyListeners();
+      return updated;
+    } catch (e) {
+      debugPrint('updateEquipment failed: $e');
+      return null;
+    }
+  }
+
+  /// Admin: delete an equipment row. Refetches the list on success so
+  /// the UI shows the latest state. Returns `true` on success.
+  Future<bool> deleteEquipment(String id) async {
+    try {
+      await bundle.equipment.delete(id);
+      _equipment = _equipment.where((e) => e.id != id).toList();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('deleteEquipment failed: $e');
+      return false;
+    }
+  }
+
   // ── CRUD: Notifications ───────────────────────────────────────────────
 
   Future<void> markRead(String id) async {
