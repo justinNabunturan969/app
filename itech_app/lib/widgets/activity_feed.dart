@@ -25,8 +25,18 @@ class ActivityFeedItem extends StatelessWidget {
   String _formatTimestamp(DateTime t) {
     final local = t.toLocal();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
     final amPm = local.hour < 12 ? 'AM' : 'PM';

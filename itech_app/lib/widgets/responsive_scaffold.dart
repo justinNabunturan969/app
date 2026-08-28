@@ -334,9 +334,9 @@ class _WideScaffold extends StatelessWidget {
                       itemBuilder: (context, i) {
                         final tab = tabs[i];
                         final selected = i == currentIndex;
-                        final isNotifTab = tab.label
-                            .toLowerCase()
-                            .contains('notif');
+                        final isNotifTab = tab.label.toLowerCase().contains(
+                          'notif',
+                        );
                         final count = tab.badgeCount > 0
                             ? tab.badgeCount
                             : (isNotifTab && i == tabs.length - 1
