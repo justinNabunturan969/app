@@ -48,17 +48,14 @@ class AdminDashboardScreen extends StatelessWidget {
         final pendingCount = ctrl.pendingRequestsCount;
         final overdueCount = ctrl.overdueCount;
         final pending = ctrl.pendingBorrowings;
-        // Loans waiting for an admin's Confirm Return to credit inventory:
-        // anything the student marked for return, plus active/overdue loans
-        // the admin may need to confirm manually (e.g. physical hand-in
-        // without a student-side tap).
+        // Loans waiting for an admin's Confirm Return to credit inventory.
+        // ONLY items the student actually asked to return (status =
+        // return_requested). Including active/overdue here was a bug — it
+        // surfaced a "Verify Return" button on every fresh borrow and let
+        // the admin accidentally flip a loan to `returned` before the
+        // student ever handed the item back, which is what the user hit.
         final returnRequests = ctrl.activeBorrowings
-            .where(
-              (b) =>
-                  b.status == BorrowingStatus.returnRequested ||
-                  b.status == BorrowingStatus.active ||
-                  b.status == BorrowingStatus.overdue,
-            )
+            .where((b) => b.status == BorrowingStatus.returnRequested)
             .toList()
           ..sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
         final activity =
