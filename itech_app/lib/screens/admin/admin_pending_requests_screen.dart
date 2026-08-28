@@ -17,7 +17,16 @@ import 'widgets/return_confirmation_sheet.dart';
 /// to `historyBorrowings` as `rejected`; verifying a return credits the
 /// inventory. All admin list actions flow through the controller.
 class AdminPendingRequestsScreen extends StatefulWidget {
-  const AdminPendingRequestsScreen({super.key});
+  const AdminPendingRequestsScreen({
+    super.key,
+    this.pendingReturnBorrowingId,
+  });
+
+  /// When this notifier carries a borrowing id, the screen auto-opens
+  /// the return-confirmation form for that borrowing and clears the
+  /// notifier. The admin shell flips this from the Notifications tab
+  /// when the admin taps a "Return to confirm" entry.
+  final ValueNotifier<String?>? pendingReturnBorrowingId;
 
   @override
   State<AdminPendingRequestsScreen> createState() =>
@@ -28,6 +37,74 @@ class _AdminPendingRequestsScreenState
     extends State<AdminPendingRequestsScreen> {
   int _filter = 0; // 0=All, 1=Pending, 2=Approved, 3=Rejected, 4=Returns
   static const _filters = ['All', 'Pending', 'Approved', 'Rejected', 'Returns'];
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for deep-links from the Notifications tab. When the admin
+    // taps a "Return to confirm" entry, the shell sets this notifier
+    // and switches to this tab; we then pop the form for that
+    // borrowing and clear the notifier so we don't re-open on
+    // subsequent rebuilds.
+    widget.pendingReturnBorrowingId?.addListener(_handlePendingReturn);
+    // The notifier may already be set by the time we mount (the shell
+    // flipped it before the tab swap). Cover that race.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handlePendingReturn();
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.pendingReturnBorrowingId?.removeListener(_handlePendingReturn);
+    super.dispose();
+  }
+
+  /// Pops the structured return-confirmation form for the borrowing
+  /// whose id is in [widget.pendingReturnBorrowingId]. Clears the
+  /// notifier so we only act once per tap.
+  void _handlePendingReturn() {
+    final notifier = widget.pendingReturnBorrowingId;
+    if (notifier == null) return;
+    final id = notifier.value;
+    if (id == null) return;
+    notifier.value = null;
+    if (!mounted) return;
+    final ctrl = context.read<StudentDashboardController>();
+    final all = <Borrowing>[
+      ...ctrl.pendingBorrowings,
+      ...ctrl.activeBorrowings,
+      ...ctrl.historyBorrowings,
+    ];
+    Borrowing? target;
+    for (final b in all) {
+      if (b.id == id) {
+        target = b;
+        break;
+      }
+    }
+    // Scope the filter to the Returns tab so the admin immediately
+    // sees the card with the matching context.
+    setState(() => _filter = 4);
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not find that loan — it may already be returned.',
+          ),
+          backgroundColor: PupColors.cyberAmber,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    // Defer the dialog to the next frame so the tab swap animation
+    // doesn't fight the modal slide-in.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _confirmVerifyReturn(context, ctrl, target!);
+    });
+  }
 
   List<Borrowing> _apply(List<Borrowing> all) {
     switch (_filter) {

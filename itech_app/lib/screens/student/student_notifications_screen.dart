@@ -14,7 +14,17 @@ import '../../theme/design_tokens.dart';
 /// "clear all" actions. Reuses the PupColors / PupGlass / tinted icon chip
 /// language shared by the other student tabs.
 class StudentNotificationsScreen extends StatefulWidget {
-  const StudentNotificationsScreen({super.key});
+  const StudentNotificationsScreen({
+    super.key,
+    this.onReturnRequestedTap,
+  });
+
+  /// Admin-only: invoked when the admin taps a "Return to confirm"
+  /// notification. The handler is expected to switch to the Pending
+  /// Requests tab and pop the return confirmation form for the
+  /// supplied borrowing id. Null on the student side, where this
+  /// gesture doesn't apply.
+  final void Function(String borrowingId)? onReturnRequestedTap;
 
   @override
   State<StudentNotificationsScreen> createState() =>
@@ -168,6 +178,28 @@ class _StudentNotificationsScreenState
                                 ? null
                                 : () {
                                     HapticFeedback.selectionClick();
+                                    // Admin "Return to confirm"
+                                    // notifications carry a
+                                    // relatedBorrowingId — tap them to
+                                    // jump straight to the return
+                                    // confirmation form on the Pending
+                                    // tab. We do that BEFORE marking
+                                    // read so the unread dot is still
+                                    // visible if the user backs out.
+                                    final hasReturnAction =
+                                        widget.onReturnRequestedTap !=
+                                            null &&
+                                            n.relatedBorrowingId != null;
+                                    if (hasReturnAction) {
+                                      widget
+                                          .onReturnRequestedTap!(
+                                            n.relatedBorrowingId!,
+                                          );
+                                      // Mark as read inline — the
+                                      // admin has clearly seen it.
+                                      ctrl.markRead(n.id);
+                                      return;
+                                    }
                                     ctrl.markRead(n.id);
                                   },
                           ),
@@ -364,6 +396,9 @@ class _NotificationCard extends StatelessWidget {
   final AppNotification notification;
   final VoidCallback? onTap;
 
+  bool get _isActionable =>
+      notification.relatedBorrowingId != null && !notification.isRead;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -377,6 +412,7 @@ class _NotificationCard extends StatelessWidget {
 
     final style = _styleFor(notification.type);
     final time = _relativeTime(notification.timestamp);
+    final actionable = _isActionable;
 
     return Material(
       color: Colors.transparent,
@@ -419,6 +455,14 @@ class _NotificationCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            if (actionable) ...[
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: style.tone,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Text(
                               time,
                               style: TextStyle(
@@ -441,6 +485,45 @@ class _NotificationCard extends StatelessWidget {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (actionable) ...[
+                          const SizedBox(height: 8),
+                          // Inline "Tap to confirm" pill so the admin
+                          // knows at a glance that this entry is
+                          // actionable (and not just a status update).
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: style.tone.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: style.tone.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.touch_app_rounded,
+                                  size: 12,
+                                  color: style.tone,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Tap to confirm return',
+                                  style: TextStyle(
+                                    color: style.tone,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 10.5,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -451,7 +534,7 @@ class _NotificationCard extends StatelessWidget {
             if (!notification.isRead)
               Positioned(
                 top: 12,
-                right: 14,
+                right: actionable ? 38 : 14,
                 child: IgnorePointer(
                   child: Container(
                     width: 8,

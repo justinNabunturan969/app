@@ -265,6 +265,12 @@ class AppNotification {
   final DateTime timestamp;
   final bool isRead;
 
+  /// Optional FK to the borrowing the notification is about. Set by the
+  /// server on return-related notifications (migration 0035) so the
+  /// admin can deep-link from the notification straight to the return
+  /// confirmation form. Null for the rest.
+  final String? relatedBorrowingId;
+
   const AppNotification({
     required this.id,
     required this.title,
@@ -272,6 +278,7 @@ class AppNotification {
     required this.type,
     required this.timestamp,
     this.isRead = false,
+    this.relatedBorrowingId,
   });
 
   AppNotification copyWith({
@@ -281,6 +288,7 @@ class AppNotification {
     NotificationType? type,
     DateTime? timestamp,
     bool? isRead,
+    String? relatedBorrowingId,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -289,6 +297,7 @@ class AppNotification {
       type: type ?? this.type,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
+      relatedBorrowingId: relatedBorrowingId ?? this.relatedBorrowingId,
     );
   }
 }
