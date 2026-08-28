@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/repositories/repository_bundle.dart';
 import '../data/repositories/user_repository.dart' show UserProfile;
@@ -66,6 +68,9 @@ class StudentDashboardController extends ChangeNotifier {
       const Duration(seconds: 15),
       (_) => _refreshBorrowingsQuietly(),
     );
+    // Restore the persisted activity log so Recent Activity survives
+    // app restarts.
+    unawaited(_loadPersistedActivity());
   }
 
   /// All CRUD goes through this bundle. The shell is responsible for
@@ -188,14 +193,99 @@ class StudentDashboardController extends ChangeNotifier {
   int get unreadCount => _unread;
 
   // ── Activity log ─────────────────────────────────────────────────────
-  // Starts EMPTY — no mock seed. Admin-scope entries are derived from the
-  // *real* realtime streams (borrowings + session_history) in
-  // [_rebuildAdminActivity], and student-scope entries are appended by
-  // [_log] whenever this device performs a CRUD op. The admin feed
-  // therefore reflects what actually happened in the database across all
-  // devices, not a hardcoded simulation.
+  // Starts EMPTY in memory, then hydrates from the persisted log in
+  // SharedPreferences (see [_loadPersistedActivity]) so the admin's
+  // Recent Activity survives app restarts. Admin-scope entries are
+  // derived from the *real* realtime streams (borrowings +
+  // session_history) in [_rebuildAdminActivity], and student-scope
+  // entries are appended by [_log] whenever this device performs a CRUD
+  // op. The admin feed therefore reflects what actually happened in the
+  // database across all devices, not a hardcoded simulation.
+  static const _activityPrefsKey = 'admin_activity_log_v1';
+  static const _activityMaxEntries = 30;
   final List<ActivityEntry> _activity = [];
+  bool _activityLoaded = false;
   List<ActivityEntry> get activity => List.unmodifiable(_activity);
+
+  /// Restores the activity log persisted by a previous session. Runs
+  /// once, fire-and-forget, from the constructor — entries are merged
+  /// newest-first and capped at [_activityMaxEntries].
+  Future<void> _loadPersistedActivity() async {
+    if (_activityLoaded) return;
+    _activityLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_activityPrefsKey);
+      if (raw == null || raw.isEmpty) return;
+      final list = jsonDecode(raw) as List<dynamic>;
+      final restored = list
+          .map((e) => _activityFromJson(e as Map<String, dynamic>))
+          .whereType<ActivityEntry>()
+          .toList();
+      // Merge: persisted entries first (they're older), then anything
+      // already logged this session, deduped by title+timestamp.
+      final seen = <String>{};
+      final merged = <ActivityEntry>[];
+      for (final entry in [...restored, ..._activity]) {
+        final key =
+            '${entry.title}|${entry.timestamp.millisecondsSinceEpoch}';
+        if (seen.add(key)) merged.add(entry);
+      }
+      _activity
+        ..clear()
+        ..addAll(merged.take(_activityMaxEntries));
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to restore activity log: $e');
+    }
+  }
+
+  /// Persists the current log so it survives restarts. Fire-and-forget;
+  /// a failed write only means the next launch restores a slightly
+  /// older snapshot.
+  Future<void> _persistActivity() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _activityPrefsKey,
+        jsonEncode(_activity.take(_activityMaxEntries).map(_activityToJson).toList()),
+      );
+    } catch (e) {
+      debugPrint('Failed to persist activity log: $e');
+    }
+  }
+
+  Map<String, dynamic> _activityToJson(ActivityEntry e) => {
+    'icon': e.icon.codePoint,
+    'tone': e.tone.toARGB32(),
+    'title': e.title,
+    'subtitle': e.subtitle,
+    'timestamp': e.timestamp.millisecondsSinceEpoch,
+    'scope': e.scope == ActivityScope.admin ? 'admin' : 'student',
+  };
+
+  ActivityEntry? _activityFromJson(Map<String, dynamic> json) {
+    try {
+      final codePoint = json['icon'] as int;
+      final tone = Color(json['tone'] as int);
+      final title = json['title'] as String;
+      final subtitle = json['subtitle'] as String? ?? '';
+      final ts = json['timestamp'] as int;
+      final scope = json['scope'] == 'admin'
+          ? ActivityScope.admin
+          : ActivityScope.student;
+      return ActivityEntry(
+        icon: IconData(codePoint, fontFamily: 'MaterialIcons'),
+        tone: tone,
+        title: title,
+        subtitle: subtitle,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
+        scope: scope,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Previous borrowings snapshot keyed by id → status, used to detect
   /// realtime transitions (new pending request, approval, rejection,
@@ -813,11 +903,9 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
-  /// Student taps "return": moves the loan to the intermediate
-  /// `returnRequested` state. Inventory is NOT credited yet — an admin
-  /// must verify the physical hand-in via [confirmReturnBorrowing]
-  /// (migration 0014). The row stays visible in the active list with a
-  /// "return pending" badge until then.
+  /// Student taps "return": the return is confirmed immediately (no admin
+  /// verification step). The repository calls `confirm_return` directly,
+  /// which marks the row `returned` and credits inventory atomically.
   Future<bool> returnBorrowing(String id) async {
     try {
       await bundle.borrowings.returnBorrowing(id);
@@ -825,39 +913,18 @@ class StudentDashboardController extends ChangeNotifier {
       // what the DB now has. Cheaper than a full reload.
       final updated = await bundle.borrowings.getById(id);
       if (updated == null) return false;
-      if (updated.status == BorrowingStatus.returned) {
-        // Mock bundle (or legacy backend): return is final immediately.
-        _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
-        _overdueBorrowings = _overdueBorrowings
-            .where((b) => b.id != id)
-            .toList();
-        _historyBorrowings = [updated, ..._historyBorrowings];
-        _log(
-          scope: ActivityScope.student,
-          icon: Icons.assignment_return_rounded,
-          tone: PupColors.mintGreen,
-          title: 'Returned: ${updated.equipmentName}',
-          subtitle: 'On time • Thank you!',
-        );
-      } else {
-        // Supabase bundle: awaiting admin verification. Keep it in the
-        // active bucket so the student sees its "awaiting verification"
-        // badge instead of thinking the item vanished.
-        _activeBorrowings = [
-          updated,
-          ..._activeBorrowings.where((b) => b.id != id),
-        ];
-        _overdueBorrowings = _overdueBorrowings
-            .where((b) => b.id != id)
-            .toList();
-        _log(
-          scope: ActivityScope.student,
-          icon: Icons.assignment_return_rounded,
-          tone: PupColors.cyberAmber,
-          title: 'Return requested: ${updated.equipmentName}',
-          subtitle: 'Awaiting admin verification',
-        );
-      }
+      _activeBorrowings = _activeBorrowings.where((b) => b.id != id).toList();
+      _overdueBorrowings = _overdueBorrowings
+          .where((b) => b.id != id)
+          .toList();
+      _historyBorrowings = [updated, ..._historyBorrowings];
+      _log(
+        scope: ActivityScope.student,
+        icon: Icons.assignment_return_rounded,
+        tone: PupColors.mintGreen,
+        title: 'Returned: ${updated.equipmentName}',
+        subtitle: 'On time • Thank you!',
+      );
       notifyListeners();
       return true;
     } catch (e) {
@@ -1092,9 +1159,10 @@ class StudentDashboardController extends ChangeNotifier {
         scope: scope,
       ),
     );
-    while (_activity.length > 30) {
+    while (_activity.length > _activityMaxEntries) {
       _activity.removeLast();
     }
+    unawaited(_persistActivity());
   }
 
   // ── Search (still client-side after the load) ────────────────────────

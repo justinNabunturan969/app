@@ -228,11 +228,16 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     return _loadRpcBorrowing(row);
   }
 
+  /// Student taps "return": the return is confirmed IMMEDIATELY — no
+  /// admin verification step. We call `confirm_return` directly, which
+  /// marks the row `returned` and credits `equipment.available_count`
+  /// (migration 0014) in one atomic transition. The legacy
+  /// `request_return` intermediate state is skipped for now.
   @override
   Future<void> returnBorrowing(String id) async {
     await _client.rpc(
       'transition_borrowing',
-      params: {'p_borrowing_id': id, 'p_action': 'request_return'},
+      params: {'p_borrowing_id': id, 'p_action': 'confirm_return'},
     );
   }
 
