@@ -129,9 +129,7 @@ class _NotificationsBellButtonState extends State<NotificationsBellButton> {
     );
 
     final icon = Icon(
-      _isOpen
-          ? Icons.notifications_rounded
-          : Icons.notifications_none_rounded,
+      _isOpen ? Icons.notifications_rounded : Icons.notifications_none_rounded,
       color: _isOpen || unread > 0 ? PupColors.cyberAmber : null,
     );
 
@@ -204,7 +202,9 @@ class _NotificationsPopoverState extends State<_NotificationsPopover> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -235,91 +235,96 @@ class _NotificationsPopoverState extends State<_NotificationsPopover> {
             ),
           ],
         ),
-        child: Consumer<StudentDashboardController>(
-          builder: (context, ctrl, _) {
-            final all = ctrl.notifications;
-            final unread = ctrl.unreadCount;
-            final filtered = _filter == 1
-                ? all.where((n) => !n.isRead).toList()
-                : all;
+        // An OverlayEntry has no Material / DefaultTextStyle ancestor, so
+        // without this wrapper the popover text fell back to the platform
+        // default face and the buttons had no ink host. Re-apply the app's
+        // typography (Inter) exactly like every other surface.
+        child: Material(
+          type: MaterialType.transparency,
+          textStyle: theme.textTheme.bodyMedium,
+          child: Consumer<StudentDashboardController>(
+            builder: (context, ctrl, _) {
+              final all = ctrl.notifications;
+              final unread = ctrl.unreadCount;
+              final filtered = _filter == 1
+                  ? all.where((n) => !n.isRead).toList()
+                  : all;
 
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _PopoverHeader(
-                  unread: unread,
-                  hasAny: all.isNotEmpty,
-                  primaryText: primaryText,
-                  onMarkAllRead: () {
-                    HapticFeedback.lightImpact();
-                    ctrl.markAllRead();
-                  },
-                  onClose: widget.onClose,
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: Text(
-                    all.isEmpty
-                        ? 'No notifications yet.'
-                        : (unread > 0
-                              ? '$unread unread ${unread == 1 ? 'notification' : 'notifications'}'
-                              : 'All caught up'),
-                    style: TextStyle(
-                      color: all.isEmpty
-                          ? subtleText
-                          : (unread > 0
-                                ? PupColors.cyberAmber
-                                : PupColors.mintGreen),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                    ),
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _PopoverHeader(
+                    unread: unread,
+                    hasAny: all.isNotEmpty,
+                    primaryText: primaryText,
+                    onMarkAllRead: () {
+                      HapticFeedback.lightImpact();
+                      ctrl.markAllRead();
+                    },
+                    onClose: widget.onClose,
                   ),
-                ),
-                if (all.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                    child: NotificationFilterChips(
-                      selected: _filter,
-                      filters: _filters,
-                      onSelected: (i) => setState(() => _filter = i),
+                    child: Text(
+                      all.isEmpty
+                          ? 'No notifications yet.'
+                          : (unread > 0
+                                ? '$unread unread ${unread == 1 ? 'notification' : 'notifications'}'
+                                : 'All caught up'),
+                      style: TextStyle(
+                        color: all.isEmpty
+                            ? subtleText
+                            : (unread > 0
+                                  ? PupColors.cyberAmber
+                                  : PupColors.mintGreen),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
-                const Divider(height: 1),
-                Flexible(
-                  child: _buildBody(
-                    ctrl: ctrl,
-                    all: all,
-                    filtered: filtered,
-                    subtleText: subtleText,
-                  ),
-                ),
-                if (all.isNotEmpty) ...[
+                  if (all.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                      child: NotificationFilterChips(
+                        selected: _filter,
+                        filters: _filters,
+                        onSelected: (i) => setState(() => _filter = i),
+                      ),
+                    ),
                   const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    child: TextButton.icon(
-                      onPressed: () => _confirmClearAll(context, ctrl),
-                      icon: const Icon(
-                        Icons.delete_sweep_rounded,
-                        size: 18,
-                      ),
-                      label: const Text(
-                        'Clear all notifications',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: PupColors.signalRed,
-                      ),
+                  Flexible(
+                    child: _buildBody(
+                      ctrl: ctrl,
+                      all: all,
+                      filtered: filtered,
+                      subtleText: subtleText,
                     ),
                   ),
+                  if (all.isNotEmpty) ...[
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      child: TextButton.icon(
+                        onPressed: () => _confirmClearAll(context, ctrl),
+                        icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                        label: const Text(
+                          'Clear all notifications',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: PupColors.signalRed,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
