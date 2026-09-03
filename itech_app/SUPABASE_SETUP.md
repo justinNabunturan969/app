@@ -374,6 +374,72 @@ during your defense.
 
 ---
 
+## Password recovery email (custom SMTP)
+
+The forgot-password flow is fully implemented in the app: the login screens
+call `resetPasswordForEmail(...)` (`student_login_screen.dart`,
+`admin_login_screen.dart`), the email link lands on `/reset-password`, and
+`reset_password_screen.dart` sets the new password on the recovery session.
+If a student taps "Send reset link" and nothing arrives, **the code is not
+the problem — Supabase's email delivery is.**
+
+### Why the built-in mailer fails
+
+- With no custom SMTP configured, Supabase sends auth mail through its
+  shared built-in mailer, which is throttled to only a few emails per hour
+  on the free plan.
+- It sends from a generic Supabase address. Institutional Microsoft 365 /
+  Outlook tenants (every `@pup.edu.ph` mailbox) commonly quarantine or
+  silently drop mail from unknown bulk senders, so the message counts as
+  "sent" in Supabase but never reaches the inbox.
+
+### Redirect URLs (already configured — keep in sync)
+
+The app passes `redirectTo` = `<deployed origin>/reset-password` on web
+(`SupabaseConfig.passwordResetRedirectUrl`) and `pupitech://auth/reset-password`
+on native. These must stay listed under **Authentication → URL Configuration
+→ Redirect URLs**. Currently whitelisted:
+
+- `https://bisaya-vert.vercel.app/reset-password`
+- `https://bisaya-vert.vercel.app/`
+- the `https://bisaya-*-…vercel.app/**` preview-deployment patterns
+
+If the production domain ever changes, add the new `/reset-password` URL here
+or reset requests will be rejected.
+
+### Turn on custom SMTP
+
+**Project Settings** (gear, bottom-left) → **Auth** → **SMTP Settings** →
+enable **Custom SMTP**, then fill in sender email, sender name, host, port,
+username, and password. Two options:
+
+- **Option A — a transactional provider (works today, no PUP IT needed).**
+  Use Resend, SendGrid, Postmark, or AWS SES. Create an account, verify your
+  sending domain, and copy its SMTP credentials in. These deliver reliably
+  to `@pup.edu.ph` inboxes and are not subject to Supabase's shared-mailer
+  throttle.
+- **Option B — PUP Microsoft 365 / Exchange Online (on-brand, needs PUP IT).**
+  Relay through PUP's own mail so recovery email comes from a real
+  `no-reply@pup.edu.ph` mailbox: host `smtp.office365.com`, port `587`
+  (STARTTLS). The mailbox must have **SMTP AUTH (authenticated SMTP) enabled**
+  in the Microsoft 365 admin center — Microsoft leaves it off by default — and
+  you should use an app password / modern-auth SMTP credential, never a
+  person's interactive password. The ask for PUP IT is therefore: *"enable
+  SMTP AUTH on a dedicated no-reply mailbox and issue SMTP credentials for
+  it."* This is the same admin dependency as Microsoft SSO.
+
+### Verify it works
+
+- Re-send a reset link and check the inbox **and** the junk folder the first
+  time.
+- **Authentication → Audit Logs** shows each recovery attempt and its
+  outcome; **Authentication → Rate Limits** shows whether repeated testing
+  has throttled you.
+- **Authentication → Emails** holds the "Reset password" template if you
+  want to brand the message.
+
+---
+
 ## Quick troubleshooting
 
 | Symptom | Fix |
@@ -381,6 +447,7 @@ during your defense.
 | `StateError: Supabase is not configured` at startup | You forgot the `--dart-define` flags. Add them to your run command. |
 | Login fails with `Invalid login credentials` | The user doesn't exist in `auth.users` yet. Create them in **Authentication → Users** in the dashboard. |
 | New sign-up can't log in — "email not confirmed" | **Confirm email** is still ON. Turn it off (**Authentication → Sign In / Providers → Email**, see step 4) and un-stick existing accounts with the `update auth.users set email_confirmed_at ...` snippet from that section. |
+| Reset link "sent" but never arrives in a `@pup.edu.ph` inbox | Custom SMTP is not configured, so Supabase's throttled generic mailer is being blocked/quarantined by Microsoft 365. Enable **Custom SMTP** (Project Settings → Auth → SMTP Settings) — see the "Password recovery email (custom SMTP)" section. Also check junk folder, **Authentication → Rate Limits**, and that the address typed matches the account's email exactly. |
 | `permission denied for table profiles` | RLS is blocking the read. Make sure you ran the migration script — it creates the policies. |
 | Equipment list is empty | You haven't seeded the `equipment` table yet. See step 5. |
 | `Project has been paused` | Free-tier projects pause after 7 days of inactivity. Open the dashboard once a week to keep it alive. |
