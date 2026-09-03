@@ -1,4 +1,0 @@
-# Local-only load test config and results. Never commit.
-.env
-.env.local
-results/
