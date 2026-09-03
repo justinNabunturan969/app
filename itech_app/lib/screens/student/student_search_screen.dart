@@ -16,7 +16,6 @@ import '../../student/search/widgets/results_list.dart';
 import '../../student/search/widgets/sort_bottom_sheet.dart';
 import '../../student/search/widgets/view_toggle_row.dart';
 import '../../student/search/widgets/voice_search_overlay.dart';
-import '../../app/language_controller.dart';
 import '../../student/search/widgets/borrow_confirm_sheet.dart';
 
 class StudentSearchScreen extends StatefulWidget {
@@ -48,7 +47,6 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
       create: (_) => StudentSearchController(storage: RecentSearchStorage()),
       builder: (context, _) {
         final ctrl = context.watch<StudentSearchController>();
-        final language = context.watch<LanguageController>().language;
 
         // Keep controller in sync (one-way from TextField to ctrl)
         if (_searchC.text != ctrl.query) {
@@ -209,7 +207,6 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
                       onCancel: () {
                         setState(() => _showVoice = false);
                       },
-                      language: language,
                     ),
                   ),
               ],

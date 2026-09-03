@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/theme_menu_button.dart';
-import '../../app/language_controller.dart';
 import '../../auth/validators/auth_validators.dart';
 import '../../auth/widgets/password_strength_field.dart';
 import '../../data/repositories/repository_bundle.dart';
@@ -44,8 +43,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
     return Consumer<StudentDashboardController>(
       builder: (context, ctrl, _) {
-        final language = context.watch<LanguageController>();
-        final copy = AppCopy(language.language);
         return Scaffold(
           body: SafeArea(
             bottom: false,
@@ -196,14 +193,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                             setState(() => _hapticsEnabled = v);
                           },
                         ),
-                        const SizedBox(height: 8),
-                        _NavRow(
-                          icon: Icons.language_rounded,
-                          title: copy.appLanguage,
-                          trailing: language.language.label,
-                          onTap: () =>
-                              _showLanguagePicker(context, language, copy),
-                        ),
                         const SizedBox(height: 18),
 
                         // Support
@@ -305,62 +294,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
   }
 
-  Future<void> _showLanguagePicker(
-    BuildContext context,
-    LanguageController language,
-    AppCopy copy,
-  ) async {
-    final selected = await showModalBottomSheet<AppLanguage>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                copy.chooseAppLanguage,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(copy.appLanguageHelp),
-              const SizedBox(height: 12),
-              for (final option in AppLanguage.values)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    option == AppLanguage.english
-                        ? Icons.language_rounded
-                        : option == AppLanguage.tagalog
-                        ? Icons.record_voice_over_rounded
-                        : Icons.forum_rounded,
-                  ),
-                  title: Text(option.label),
-                  subtitle: Text(option.speechLocaleId),
-                  trailing: option == language.language
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          color: PupColors.mintGreen,
-                        )
-                      : null,
-                  onTap: () => Navigator.pop(sheetContext, option),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected == null) return;
-    await language.setLanguage(selected);
-    if (!context.mounted) return;
-    _snack(context, copy.languageSelected(selected.label));
-  }
-
   Future<void> _showEditProfileSheet(
     BuildContext context,
     StudentDashboardController ctrl,
@@ -442,9 +375,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               const SizedBox(height: 20),
               Divider(
                 height: 1,
-                color: Theme.of(sheetContext).dividerColor.withValues(
-                      alpha: 0.4,
-                    ),
+                color: Theme.of(
+                  sheetContext,
+                ).dividerColor.withValues(alpha: 0.4),
               ),
               const SizedBox(height: 12),
               Text(
@@ -561,13 +494,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
         ],
         onSubmit: () async {
-          await context
-              .read<RepositoryBundle>()
-              .user
-              .changePassword(
-                currentPassword: current.text,
-                newPassword: password.text,
-              );
+          await context.read<RepositoryBundle>().user.changePassword(
+            currentPassword: current.text,
+            newPassword: password.text,
+          );
           successMessage = 'Password updated.';
           return successMessage;
         },
@@ -624,7 +554,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           successMessage = appliedNow
               ? 'Email updated.'
               : 'Confirmation link sent. Your email updates after you '
-                  'confirm it from your new inbox.';
+                    'confirm it from your new inbox.';
           return successMessage;
         },
       ),
@@ -674,10 +604,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
         ],
         onSubmit: () async {
-          await context
-              .read<RepositoryBundle>()
-              .user
-              .changeStudentId(newStudentId: studentId.text);
+          await context.read<RepositoryBundle>().user.changeStudentId(
+            newStudentId: studentId.text,
+          );
           successMessage = 'Student ID updated.';
           return successMessage;
         },
@@ -896,8 +825,7 @@ class _AccountActionSheetState extends State<_AccountActionSheet> {
           children: [
             Text(
               widget.title,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 14),
             ...widget.fields,

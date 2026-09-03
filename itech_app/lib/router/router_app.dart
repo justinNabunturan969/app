@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../app/theme_controller.dart';
-import '../app/language_controller.dart';
 import '../theme/design_tokens.dart';
 
 class RouterApp extends StatelessWidget {
@@ -11,22 +10,15 @@ class RouterApp extends StatelessWidget {
     super.key,
     required this.router,
     required this.themeController,
-    required this.languageController,
   });
 
   final GoRouter router;
   final ThemeController themeController;
-  final LanguageController languageController;
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<ThemeController>.value(value: themeController),
-        ChangeNotifierProvider<LanguageController>.value(
-          value: languageController,
-        ),
-      ],
+    return ChangeNotifierProvider<ThemeController>.value(
+      value: themeController,
       child: Consumer<ThemeController>(
         builder: (context, controller, _) {
           return MaterialApp.router(

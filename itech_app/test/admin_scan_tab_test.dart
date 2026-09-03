@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:itech_app/app/language_controller.dart';
 import 'package:itech_app/app/theme_controller.dart';
 import 'package:itech_app/data/repositories/repository_bundle.dart';
 import 'package:itech_app/screens/shell/admin_shell.dart';
@@ -17,9 +16,6 @@ void main() {
           Provider<RepositoryBundle>.value(value: RepositoryBundle.mock()),
           ChangeNotifierProvider<ThemeController>(
             create: (_) => ThemeController(),
-          ),
-          ChangeNotifierProvider<LanguageController>(
-            create: (_) => LanguageController(),
           ),
         ],
         child: const MaterialApp(home: AdminShell()),

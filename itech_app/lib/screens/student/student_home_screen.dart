@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme_menu_button.dart';
-import '../../app/language_controller.dart';
 import '../../student/models.dart';
 import '../../student/search/widgets/borrow_confirm_sheet.dart';
 import '../../student/search/widgets/voice_search_overlay.dart';
@@ -115,7 +114,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
     return Consumer<StudentDashboardController>(
       builder: (context, ctrl, _) {
-        final language = context.watch<LanguageController>().language;
         final firstName = ctrl.studentFirstName;
         final greeting = hour < 12
             ? 'Good Morning'
@@ -336,7 +334,6 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                         ctrl.submitSearch(text);
                       },
                       onCancel: () => setState(() => _showVoice = false),
-                      language: language,
                     ),
                   ),
               ],

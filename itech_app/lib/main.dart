@@ -8,7 +8,6 @@ import 'app/app_reloader_stub.dart'
     if (dart.library.js_interop) 'app/app_reloader_web.dart';
 import 'app/session_lifecycle_guard.dart';
 import 'app/theme_controller.dart';
-import 'app/language_controller.dart';
 import 'auth/session/auth_session_storage.dart';
 import 'data/repositories/repository_bundle.dart';
 import 'env/supabase_config.dart';
@@ -18,7 +17,6 @@ import 'screens/onboarding/configuration_required_screen.dart';
 
 late final AuthSessionStorage authSessionStorage;
 late final ThemeController themeController;
-late final LanguageController languageController;
 late final RepositoryBundle repositoryBundle;
 
 /// Convenience accessor used everywhere in the app code.
@@ -65,8 +63,6 @@ Future<void> main() async {
   // boots directly into the user's chosen mode (no light-mode flash).
   themeController = ThemeController();
   await themeController.load();
-  languageController = LanguageController();
-  await languageController.load();
 
   final appRouter = AppRouter(
     authStorage: authSessionStorage,
@@ -129,7 +125,6 @@ Future<void> main() async {
         child: RouterApp(
           router: appRouter.router,
           themeController: themeController,
-          languageController: languageController,
         ),
       ),
     ),

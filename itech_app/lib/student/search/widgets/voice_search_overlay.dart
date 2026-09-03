@@ -3,7 +3,6 @@ import 'package:speech_to_text/speech_to_text.dart' as st;
 import 'dart:math' as math;
 
 import '../../../theme/design_tokens.dart';
-import '../../../app/language_controller.dart';
 import 'voice_search_permission.dart';
 
 class VoiceSearchOverlay extends StatefulWidget {
@@ -12,13 +11,11 @@ class VoiceSearchOverlay extends StatefulWidget {
     required this.onTranscribed,
     required this.onPartialTranscribed,
     required this.onCancel,
-    required this.language,
   });
 
   final ValueChanged<String> onTranscribed;
   final ValueChanged<String> onPartialTranscribed;
   final VoidCallback onCancel;
-  final AppLanguage language;
 
   @override
   State<VoiceSearchOverlay> createState() => _VoiceSearchOverlayState();
@@ -71,7 +68,6 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
   }
 
   Future<void> _initRecognizer() async {
-    final copy = AppCopy(widget.language);
     final available = await _speech.initialize(
       onStatus: (status) {
         if (!mounted) return;
@@ -89,7 +85,9 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
     if (!mounted) return;
     setState(() {
       _available = available;
-      _error = available ? null : copy.microphoneOrSpeechUnavailable();
+      _error = available
+          ? null
+          : 'Microphone or speech recognition is unavailable.';
     });
 
     if (available) {
@@ -98,7 +96,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
       // reject a valid device locale (for example `tl_PH` vs `fil-PH`) before
       // recognition starts. Let the platform attempt the selected locale and
       // surface its error if it truly is unavailable.
-      _resolvedLocaleId = widget.language.speechLocaleId;
+      _resolvedLocaleId = 'en-US';
       _listen();
     }
   }
@@ -239,7 +237,6 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final copy = AppCopy(widget.language);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Once the recognizer is listening, we show the live transcript UI.
     // Before that — i.e. while we're waiting for permission, waiting for
@@ -289,15 +286,15 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                       Expanded(
                         child: Text(
                           _listening
-                              ? copy.listening
+                              ? 'Listening…'
                               : (_available
-                                    ? copy.readyFor(widget.language.label)
+                                    ? 'Ready for English'
                                     : (_permission == null
                                           ? 'Preparing microphone…'
                                           : (_permission ==
                                                     MicrophonePermissionStatus
                                                         .granted
-                                                ? copy.microphoneUnavailable
+                                                ? 'Mic unavailable'
                                                 : 'Microphone access needed'))),
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
@@ -368,7 +365,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: Text(copy.cancel),
+                          child: Text('Cancel'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -419,7 +416,7 @@ class _VoiceSearchOverlayState extends State<VoiceSearchOverlay> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            child: Text(copy.search),
+                            child: Text('Search'),
                           ),
                         ),
                     ],

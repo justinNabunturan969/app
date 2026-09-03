@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repository_bundle.dart';
-import '../../app/language_controller.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/responsive_scaffold.dart';
@@ -23,24 +22,24 @@ class StudentShell extends StatefulWidget {
 class _StudentShellState extends State<StudentShell> {
   int index = 0;
 
-  static List<ShellTab> _tabs(AppCopy copy) => [
+  static const List<ShellTab> _tabs = [
     ShellTab(
-      label: copy.home,
+      label: 'Home',
       icon: Icons.home_outlined,
       selectedIcon: Icons.home_rounded,
     ),
     ShellTab(
-      label: copy.analytics,
+      label: 'Analytics',
       icon: Icons.analytics_outlined,
       selectedIcon: Icons.analytics_rounded,
     ),
     ShellTab(
-      label: copy.borrowings,
+      label: 'Borrowings',
       icon: Icons.history_rounded,
       selectedIcon: Icons.history_rounded,
     ),
     ShellTab(
-      label: copy.profile,
+      label: 'Profile',
       icon: Icons.person_outline_rounded,
       selectedIcon: Icons.person_rounded,
     ),
@@ -54,10 +53,9 @@ class _StudentShellState extends State<StudentShell> {
             ..load(),
       builder: (context, _) {
         final ctrl = context.watch<StudentDashboardController>();
-        final copy = AppCopy(context.watch<LanguageController>().language);
         return ResponsiveScaffold(
           currentIndex: index,
-          tabs: _tabs(copy),
+          tabs: _tabs,
           onTabTap: (i) {
             if (i == index) return;
             setState(() => index = i);

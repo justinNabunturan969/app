@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repository_bundle.dart';
-import '../../app/language_controller.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/responsive_scaffold.dart';
@@ -35,13 +34,12 @@ class _AdminShellState extends State<AdminShell> {
   /// so a fresh app install doesn't badge the entire backlog.
   DateTime _historyLastSeen = DateTime.now();
 
-  static List<ShellTab> _tabs(
-    AppCopy copy, {
+  static List<ShellTab> _tabs({
     required int pendingCount,
     required int unseenHistoryCount,
   }) => [
     ShellTab(
-      label: copy.dashboard,
+      label: 'Dashboard',
       icon: Icons.dashboard_outlined,
       selectedIcon: Icons.dashboard_rounded,
     ),
@@ -52,23 +50,23 @@ class _AdminShellState extends State<AdminShell> {
       badgeCount: unseenHistoryCount,
     ),
     ShellTab(
-      label: copy.inventory,
+      label: 'Inventory',
       icon: Icons.inventory_2_outlined,
       selectedIcon: Icons.inventory_2_rounded,
     ),
     ShellTab(
-      label: copy.pending,
+      label: 'Pending',
       icon: Icons.pending_actions_outlined,
       selectedIcon: Icons.pending_actions_rounded,
       badgeCount: pendingCount,
     ),
     ShellTab(
-      label: copy.scan,
+      label: 'Scan',
       icon: Icons.qr_code_scanner_rounded,
       selectedIcon: Icons.qr_code_scanner_rounded,
     ),
     ShellTab(
-      label: copy.notifications,
+      label: 'Notifications',
       icon: Icons.notifications_none_rounded,
       selectedIcon: Icons.notifications_rounded,
     ),
@@ -82,7 +80,6 @@ class _AdminShellState extends State<AdminShell> {
             ..load(),
       builder: (context, _) {
         final ctrl = context.watch<StudentDashboardController>();
-        final copy = AppCopy(context.watch<LanguageController>().language);
 
         // ── Badge counts ──────────────────────────────────────────────
         // Pending tab: live count of pending borrow requests (realtime).
@@ -98,7 +95,6 @@ class _AdminShellState extends State<AdminShell> {
         return ResponsiveScaffold(
           currentIndex: _index,
           tabs: _tabs(
-            copy,
             pendingCount: pendingCount,
             unseenHistoryCount: unseenHistoryCount,
           ),
@@ -314,4 +310,3 @@ class _AdminErrorBanner extends StatelessWidget {
     );
   }
 }
-
