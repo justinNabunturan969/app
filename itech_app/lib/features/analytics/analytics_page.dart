@@ -162,11 +162,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                             child: OutlinedButton(
                               onPressed: _onTap,
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: PupColors.pupMaroon,
+                                foregroundColor: PupColors.brand(context),
                                 side: BorderSide(
-                                  color: PupColors.pupMaroon.withValues(
-                                    alpha: 0.4,
-                                  ),
+                                  color: PupColors.brand(
+                                    context,
+                                  ).withValues(alpha: 0.4),
                                 ),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,

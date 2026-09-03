@@ -129,7 +129,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     child: Text(
                       'Already have an account? Sign In',
                       style: TextStyle(
-                        color: PupColors.techCyan,
+                        color: PupColors.accentText(context),
                         fontWeight: FontWeight.w700,
                       ),
                     ),

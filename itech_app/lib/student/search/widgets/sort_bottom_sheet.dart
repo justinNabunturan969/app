@@ -24,7 +24,11 @@ class SortBottomSheet extends StatelessWidget {
         dense: true,
         leading: Icon(
           selected ? Icons.radio_button_checked_rounded : Icons.circle_outlined,
-          color: selected ? PupColors.cyberAmber : PupColors.ashGray,
+          color: selected
+              ? PupColors.cyberAmber
+              : isDark
+              ? Colors.white70
+              : PupColors.ashGray,
         ),
         title: Text(
           label,

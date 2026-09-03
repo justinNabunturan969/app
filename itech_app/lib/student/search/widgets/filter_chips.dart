@@ -90,7 +90,11 @@ class FilterChipsRow extends StatelessWidget {
                 child: Text(
                   spec.label,
                   style: TextStyle(
-                    color: isSelected ? Colors.white : PupColors.ashGray,
+                    color: isSelected
+                        ? const Color(0xFF1B1B1B)
+                        : Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : PupColors.ashGray,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),

@@ -369,7 +369,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                     icon: const Icon(Icons.shield_outlined, size: 16),
                     label: const Text('Faculty / Admin'),
                     style: TextButton.styleFrom(
-                      foregroundColor: PupColors.pupMaroon,
+                      foregroundColor: PupColors.brand(context),
                     ),
                   ),
                 ],
@@ -455,8 +455,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                         loading: _loading,
                         accent: PupColors.cyberAmber,
                         foreground: const Color(0xFF1B1B1B),
-                        onPressed:
-                            (_loading || _lockedUntil != null)
+                        onPressed: (_loading || _lockedUntil != null)
                             ? null
                             : _submit,
                       ),
@@ -482,7 +481,7 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                                 ? null
                                 : () => context.go('/student/signup'),
                             style: TextButton.styleFrom(
-                              foregroundColor: PupColors.techCyan,
+                              foregroundColor: PupColors.accentText(context),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
                               ),
@@ -611,7 +610,7 @@ class _RememberAndForgot extends StatelessWidget {
         TextButton(
           onPressed: () => onForgot(context),
           style: TextButton.styleFrom(
-            foregroundColor: PupColors.techCyan,
+            foregroundColor: PupColors.accentText(context),
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -156,7 +156,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     icon: const Icon(Icons.school_outlined, size: 16),
                     label: const Text('Student Login'),
                     style: TextButton.styleFrom(
-                      foregroundColor: PupColors.techCyan,
+                      foregroundColor: PupColors.accentText(context),
                     ),
                   ),
                 ],
@@ -338,7 +338,7 @@ class _RememberAndForgot extends StatelessWidget {
         TextButton(
           onPressed: () => onForgot(context),
           style: TextButton.styleFrom(
-            foregroundColor: PupColors.techCyan,
+            foregroundColor: PupColors.accentText(context),
             padding: const EdgeInsets.symmetric(horizontal: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,

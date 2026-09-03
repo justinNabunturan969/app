@@ -70,8 +70,9 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -115,8 +116,7 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                             children: [
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       'Login History',
@@ -200,13 +200,12 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                             _OnlineNowSection(
                               sessions: ctrl.activeSessions,
                               currentAuthId: ctrl.currentAuthId,
-                              onForceLogout: (session) =>
-                                  _confirmAndKick(
-                                    context,
-                                    ctrl,
-                                    profileId: session.id,
-                                    displayName: session.studentName,
-                                  ),
+                              onForceLogout: (session) => _confirmAndKick(
+                                context,
+                                ctrl,
+                                profileId: session.id,
+                                displayName: session.studentName,
+                              ),
                             ),
                             const SizedBox(height: 18),
                           ],
@@ -216,7 +215,7 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                             children: [
                               Icon(
                                 Icons.login_rounded,
-                                color: PupColors.pupMaroon,
+                                color: PupColors.brand(context),
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
@@ -261,14 +260,14 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                       ),
                     )
                   else if (history.isEmpty)
-                    const SliverToBoxAdapter(
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 36),
+                        padding: const EdgeInsets.symmetric(vertical: 36),
                         child: Center(
                           child: Text(
                             'No sessions recorded yet.',
                             style: TextStyle(
-                              color: PupColors.ashGray,
+                              color: subtleText,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -280,27 +279,22 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                       sliver: SliverList.separated(
                         itemCount: history.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, i) {
                           final entry = history[i];
-                          final isSelf =
-                              entry.profileId == ctrl.currentAuthId;
+                          final isSelf = entry.profileId == ctrl.currentAuthId;
                           return _HistoryCard(
                             entry: entry,
-                            onTap: () => _showSessionSheet(
-                              context,
-                              ctrl,
-                              entry,
-                            ),
+                            onTap: () =>
+                                _showSessionSheet(context, ctrl, entry),
                             onForceLogout: isSelf
                                 ? null
                                 : () => _confirmAndKick(
-                                      context,
-                                      ctrl,
-                                      profileId: entry.profileId,
-                                      displayName: entry.fullName,
-                                    ),
+                                    context,
+                                    ctrl,
+                                    profileId: entry.profileId,
+                                    displayName: entry.fullName,
+                                  ),
                           );
                         },
                       ),
@@ -444,10 +438,7 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
         'Could not force logout $displayName. Try again.',
     };
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -527,23 +518,21 @@ class _HistoryBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: PupColors.techCyan.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: PupColors.techCyan.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: PupColors.techCyan.withValues(alpha: 0.45)),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.fact_check_rounded,
             color: PupColors.techCyan,
             size: 12,
           ),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text(
             'AUDIT',
             style: TextStyle(
-              color: PupColors.techCyan,
+              color: PupColors.accentText(context),
               fontWeight: FontWeight.w900,
               fontSize: 10,
               letterSpacing: 1.4,
@@ -579,10 +568,7 @@ class _LoginHistoryHeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            PupColors.pupMaroon,
-            PupColors.deepMahogany,
-          ],
+          colors: [PupColors.pupMaroon, PupColors.deepMahogany],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -667,8 +653,9 @@ class _HistoryStatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -752,8 +739,9 @@ class _HistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -815,18 +803,20 @@ class _HistoryCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: PupColors.pupMaroon
-                                  .withValues(alpha: 0.14),
+                              color: PupColors.pupMaroon.withValues(
+                                alpha: 0.14,
+                              ),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: PupColors.pupMaroon
-                                    .withValues(alpha: 0.45),
+                                color: PupColors.pupMaroon.withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                             ),
-                            child: const Text(
+                            child: Text(
                               'FACULTY',
                               style: TextStyle(
-                                color: PupColors.pupMaroon,
+                                color: PupColors.brand(context),
                                 fontWeight: FontWeight.w900,
                                 fontSize: 8.5,
                                 letterSpacing: 1.0,
@@ -850,11 +840,7 @@ class _HistoryCard extends StatelessWidget {
                     // Time range + duration
                     Row(
                       children: [
-                        Icon(
-                          Icons.login_rounded,
-                          size: 13,
-                          color: subtleText,
-                        ),
+                        Icon(Icons.login_rounded, size: 13, color: subtleText),
                         const SizedBox(width: 4),
                         Text(
                           _formatDateTime(entry.loggedInAt),
@@ -871,11 +857,7 @@ class _HistoryCard extends StatelessWidget {
                           color: subtleText,
                         ),
                         const SizedBox(width: 6),
-                        Icon(
-                          Icons.logout_rounded,
-                          size: 13,
-                          color: subtleText,
-                        ),
+                        Icon(Icons.logout_rounded, size: 13, color: subtleText),
                         const SizedBox(width: 4),
                         Text(
                           _formatDateTime(entry.endedAt),
@@ -1001,16 +983,10 @@ class _AvatarBubble extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            tone.withValues(alpha: 0.32),
-            tone.withValues(alpha: 0.10),
-          ],
+          colors: [tone.withValues(alpha: 0.32), tone.withValues(alpha: 0.10)],
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: tone.withValues(alpha: 0.45),
-          width: 1.0,
-        ),
+        border: Border.all(color: tone.withValues(alpha: 0.45), width: 1.0),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -1144,10 +1120,7 @@ class _HistoryErrorPanel extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextButton(
-                onPressed: onDismiss,
-                child: const Text('Dismiss'),
-              ),
+              TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
               const SizedBox(width: 6),
               FilledButton.icon(
                 onPressed: onRetry,
@@ -1180,8 +1153,9 @@ class _SessionDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -1195,9 +1169,7 @@ class _SessionDetailSheet extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(22),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
@@ -1268,19 +1240,20 @@ class _SessionDetailSheet extends StatelessWidget {
                                       vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: PupColors.pupMaroon
-                                          .withValues(alpha: 0.14),
-                                      borderRadius:
-                                          BorderRadius.circular(6),
+                                      color: PupColors.pupMaroon.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: PupColors.pupMaroon
-                                            .withValues(alpha: 0.45),
+                                        color: PupColors.pupMaroon.withValues(
+                                          alpha: 0.45,
+                                        ),
                                       ),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       'FACULTY',
                                       style: TextStyle(
-                                        color: PupColors.pupMaroon,
+                                        color: PupColors.brand(context),
                                         fontWeight: FontWeight.w900,
                                         fontSize: 9,
                                         letterSpacing: 1.0,
@@ -1301,9 +1274,7 @@ class _SessionDetailSheet extends StatelessWidget {
                             _DetailRow(
                               icon: Icons.alternate_email_rounded,
                               label: 'Email',
-                              value: entry.email.isEmpty
-                                  ? '—'
-                                  : entry.email,
+                              value: entry.email.isEmpty ? '—' : entry.email,
                             ),
                             _DetailRow(
                               icon: Icons.numbers_rounded,
@@ -1412,19 +1383,21 @@ class _SessionDetailSheet extends StatelessWidget {
                                   vertical: 14,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: PupColors.ashGray
-                                      .withValues(alpha: 0.08),
+                                  color: PupColors.ashGray.withValues(
+                                    alpha: 0.08,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: PupColors.ashGray
-                                        .withValues(alpha: 0.30),
+                                    color: PupColors.ashGray.withValues(
+                                      alpha: 0.30,
+                                    ),
                                   ),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'No borrowings were created during this '
                                   'session — the user only browsed.',
                                   style: TextStyle(
-                                    color: PupColors.ashGray,
+                                    color: subtleText,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
                                   ),
@@ -1433,8 +1406,7 @@ class _SessionDetailSheet extends StatelessWidget {
                             else
                               for (final name in entry.activityNames)
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.only(bottom: 6),
                                   child: _ActivityRow(name: name),
                                 ),
 
@@ -1559,9 +1531,7 @@ class _ActivityRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: PupColors.mintGreen.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: PupColors.mintGreen.withValues(alpha: 0.30),
-        ),
+        border: Border.all(color: PupColors.mintGreen.withValues(alpha: 0.30)),
       ),
       child: Row(
         children: [
@@ -1608,17 +1578,16 @@ class _OnlineNowSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
       decoration: BoxDecoration(
         color: PupColors.mintGreen.withValues(alpha: isDark ? 0.08 : 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: PupColors.mintGreen.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: PupColors.mintGreen.withValues(alpha: 0.45)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1735,8 +1704,9 @@ class _OnlineUserRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -1765,8 +1735,8 @@ class _OnlineUserRow extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               _initials,
-              style: const TextStyle(
-                color: PupColors.techCyan,
+              style: TextStyle(
+                color: PupColors.accentText(context),
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),
@@ -1858,4 +1828,3 @@ class _SectionHeading extends StatelessWidget {
     );
   }
 }
-

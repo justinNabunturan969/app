@@ -15,6 +15,19 @@ class NoResultsState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const popular = ['Multimeter', 'Wrench', 'Arduino', 'Oscilloscope'];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark
+        ? Theme.of(context).colorScheme.onSurface
+        : PupColors.slateGray;
+    final subColor = isDark
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : PupColors.ashGray;
+    final panelFill = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.65);
+    final panelBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -30,7 +43,7 @@ class NoResultsState extends StatelessWidget {
                 'No results found for "$query"',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: PupColors.slateGray,
+                  color: titleColor,
                 ),
               ),
             ],
@@ -40,48 +53,48 @@ class NoResultsState extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.65),
+              color: panelFill,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+              border: Border.all(color: panelBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Try searching for:',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: PupColors.slateGray,
+                    color: titleColor,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   '• Different keywords',
                   style: TextStyle(
-                    color: PupColors.ashGray,
+                    color: subColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const Text(
+                Text(
                   '• Check spelling',
                   style: TextStyle(
-                    color: PupColors.ashGray,
+                    color: subColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const Text(
+                Text(
                   '• Use shorter terms',
                   style: TextStyle(
-                    color: PupColors.ashGray,
+                    color: subColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'Popular Searches:',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: PupColors.slateGray,
+                    color: titleColor,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -110,7 +123,7 @@ class NoResultsState extends StatelessWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 12,
-                                color: PupColors.slateGray,
+                                color: titleColor,
                               ),
                             ),
                           ),
@@ -133,13 +146,24 @@ class SearchingShimmerState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = isDark
+        ? Theme.of(context).colorScheme.onSurface
+        : PupColors.slateGray;
+
     // Simple shimmer blocks (no dependency)
     Widget block() => Container(
       height: 110,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.55),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.55),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+        ),
       ),
     );
 
@@ -148,15 +172,18 @@ class SearchingShimmerState extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          const Row(
+          Row(
             children: [
-              Icon(Icons.hourglass_bottom_rounded, color: PupColors.cyberAmber),
-              SizedBox(width: 8),
+              const Icon(
+                Icons.hourglass_bottom_rounded,
+                color: PupColors.cyberAmber,
+              ),
+              const SizedBox(width: 8),
               Text(
                 'Searching…',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: PupColors.slateGray,
+                  color: labelColor,
                 ),
               ),
             ],

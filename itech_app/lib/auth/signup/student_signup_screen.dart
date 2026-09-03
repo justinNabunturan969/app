@@ -219,7 +219,7 @@ class _StudentSignupScreenState extends State<StudentSignupScreen> {
                     icon: const Icon(Icons.login_rounded, size: 16),
                     label: const Text('Already have an account?'),
                     style: TextButton.styleFrom(
-                      foregroundColor: PupColors.pupMaroon,
+                      foregroundColor: PupColors.brand(context),
                     ),
                   ),
                 ],
@@ -341,10 +341,10 @@ class _StudentSignupScreenState extends State<StudentSignupScreen> {
                     Expanded(
                       child: Text(
                         'Your account is saved in Supabase and works on every device that points at the same project.',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
-                          color: PupColors.techCyan,
+                          color: PupColors.accentText(context),
                           height: 1.35,
                         ),
                       ),

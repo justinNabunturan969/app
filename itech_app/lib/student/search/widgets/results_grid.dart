@@ -38,6 +38,13 @@ class ResultsGrid extends StatelessWidget {
           final e = items[i];
           final available = e.available > 0;
           final tone = available ? PupColors.techCyan : PupColors.signalRed;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final titleColor = isDark
+              ? Theme.of(context).colorScheme.onSurface
+              : PupColors.slateGray;
+          final subColor = isDark
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : PupColors.ashGray;
 
           return GestureDetector(
             onTap: () => onTapEquipment(e),
@@ -79,11 +86,11 @@ class ResultsGrid extends StatelessWidget {
                               e.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 13,
                                 height: 1.2,
-                                color: PupColors.slateGray,
+                                color: titleColor,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -92,7 +99,7 @@ class ResultsGrid extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: PupColors.ashGray,
+                                color: subColor,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 10.5,
                               ),
@@ -138,9 +145,7 @@ class ResultsGrid extends StatelessWidget {
                           e.isLiked
                               ? Icons.favorite_rounded
                               : Icons.favorite_border_rounded,
-                          color: e.isLiked
-                              ? PupColors.signalRed
-                              : PupColors.ashGray,
+                          color: e.isLiked ? PupColors.signalRed : subColor,
                           size: 18,
                         ),
                       ),

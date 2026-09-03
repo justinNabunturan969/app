@@ -62,10 +62,7 @@ class ProfileAvatarButton extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      PupColors.pupMaroon,
-                      PupColors.deepMahogany,
-                    ],
+                    colors: [PupColors.pupMaroon, PupColors.deepMahogany],
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -85,9 +82,7 @@ class ProfileAvatarButton extends StatelessWidget {
                   Text(
                     roleLabel,
                     style: TextStyle(
-                      color: isDark
-                          ? Colors.white
-                          : PupColors.slateGray,
+                      color: isDark ? Colors.white : PupColors.slateGray,
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
                     ),
@@ -95,7 +90,9 @@ class ProfileAvatarButton extends StatelessWidget {
                   Text(
                     'Tap an action',
                     style: TextStyle(
-                      color: PupColors.ashGray,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : PupColors.ashGray,
                       fontWeight: FontWeight.w600,
                       fontSize: 10.5,
                     ),
@@ -118,9 +115,7 @@ class ProfileAvatarButton extends StatelessWidget {
           PopupMenuItem<String>(
             value: 'theme',
             child: _MenuRow(
-              icon: isDark
-                  ? Icons.light_mode_rounded
-                  : Icons.dark_mode_rounded,
+              icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
               label: isDark ? 'Light mode' : 'Dark mode',
               color: PupColors.cyberAmber,
             ),
@@ -187,10 +182,7 @@ class _MenuRow extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
         ),
       ],
     );

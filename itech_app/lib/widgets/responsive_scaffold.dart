@@ -313,7 +313,11 @@ class _WideScaffold extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w700,
-                                  color: PupColors.ashGray,
+                                  color: isDark
+                                      ? Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant
+                                      : PupColors.ashGray,
                                   letterSpacing: 0.2,
                                 ),
                               ),

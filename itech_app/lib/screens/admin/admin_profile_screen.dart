@@ -290,7 +290,12 @@ class _InfoCard extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 11, color: PupColors.ashGray),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : PupColors.ashGray,
+                ),
               ),
               const SizedBox(height: 2),
               Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),

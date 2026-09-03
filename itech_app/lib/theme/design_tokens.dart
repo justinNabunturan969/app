@@ -8,6 +8,16 @@ class PupColors {
   static const Color pupMaroon = Color(0xFF7B1818); // #7B1818
   static const Color pupMaroonAlt = Color(0xFF8B0000); // #8B0000
 
+  /// Dark-mode counterpart of [pupMaroon]: same hue family but light enough
+  /// to read as text/icon on carbon and darkCard surfaces (>= 4.5:1).
+  static const Color pupMaroonBright = Color(0xFFFF6B6B); // #FF6B6B
+
+  /// Brand maroon for text/icons: stays readable on the active surface.
+  static Color brand(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? pupMaroonBright
+      : pupMaroon;
+
   // Primary Dark
   static const Color deepMahogany = Color(0xFF4A0E0E); // #4A0E0E
 
@@ -19,6 +29,15 @@ class PupColors {
 
   // Accent 2
   static const Color techCyan = Color(0xFF00B4D8); // #00B4D8
+
+  /// Deeper cyan for light-mode text: [techCyan] fails WCAG AA on white
+  /// (~2.5:1); this clears it (~5.4:1) while staying in the cyan family.
+  static const Color cyanDeep = Color(0xFF0E7490); // #0E7490
+
+  /// Cyan accent for text/icons that must stay readable on the active surface.
+  /// Bright [techCyan] on dark, deeper [cyanDeep] on light.
+  static Color accentText(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? techCyan : cyanDeep;
 
   // Success
   static const Color mintGreen = Color(0xFF06D6A0); // #06D6A0
@@ -444,7 +463,8 @@ class PupTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme.copyWith(
-        primary: PupColors.pupMaroon,
+        primary: PupColors.pupMaroonBright,
+        onPrimary: PupColors.deepMahogany,
         secondary: PupColors.techCyan,
         surface: carbon,
         error: PupColors.signalRed,
@@ -485,7 +505,7 @@ class PupTheme {
           ),
         ),
         labelStyle: const TextStyle(color: Colors.white70),
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55)),
       ),
       textTheme: PupTypography.textThemeFor(ThemeData.dark().textTheme),
     );

@@ -39,7 +39,9 @@ class ViewToggleRow extends StatelessWidget {
             tooltip: 'Sort',
             onPressed: onSort,
             icon: const Icon(Icons.sort_rounded),
-            color: PupColors.slateGray,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : PupColors.slateGray,
           ),
         ],
       ),
@@ -62,6 +64,11 @@ class _ToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inactiveColor = isDark
+        ? Theme.of(context).colorScheme.onSurface
+        : PupColors.slateGray;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -69,7 +76,11 @@ class _ToggleButton extends StatelessWidget {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? PupColors.cyberAmber : Colors.white,
+          color: active
+              ? PupColors.cyberAmber
+              : isDark
+              ? PupColors.darkCard
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             if (active)
@@ -79,7 +90,10 @@ class _ToggleButton extends StatelessWidget {
                 offset: const Offset(0, 8),
               ),
           ],
-          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          border: Border.all(
+            color: Colors.black.withValues(alpha: 0.05),
+            width: isDark ? 0 : 1,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -87,7 +101,7 @@ class _ToggleButton extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: active ? const Color(0xFF1B1B1B) : PupColors.slateGray,
+              color: active ? const Color(0xFF1B1B1B) : inactiveColor,
             ),
             const SizedBox(width: 8),
             Text(
@@ -95,7 +109,7 @@ class _ToggleButton extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
-                color: active ? const Color(0xFF1B1B1B) : PupColors.slateGray,
+                color: active ? const Color(0xFF1B1B1B) : inactiveColor,
               ),
             ),
           ],

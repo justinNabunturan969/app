@@ -58,6 +58,11 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
 
         final isEmptySearch = ctrl.query.isEmpty;
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final titleColor = isDark
+            ? Theme.of(context).colorScheme.onSurface
+            : PupColors.slateGray;
+
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: SafeArea(
@@ -133,9 +138,9 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
                             children: [
                               Text(
                                 'Found ${ctrl.results.length} result${ctrl.results.length == 1 ? '' : 's'}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w900,
-                                  color: PupColors.slateGray,
+                                  color: titleColor,
                                 ),
                               ),
                               const Spacer(),
@@ -152,7 +157,7 @@ class _StudentSearchScreenState extends State<StudentSearchScreen> {
                                   ctrl.viewMode == SearchViewMode.grid
                                       ? Icons.grid_view_rounded
                                       : Icons.view_list_rounded,
-                                  color: PupColors.slateGray,
+                                  color: titleColor,
                                 ),
                               ),
                             ],

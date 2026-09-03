@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -166,9 +166,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
     // `condition` parameter required; we hardcode it here for the
     // happy path.
     unawaited(
-      ctrl
-          .confirmReturnBorrowing(b.id, condition: 'good')
-          .then((result) {
+      ctrl.confirmReturnBorrowing(b.id, condition: 'good').then((result) {
         if (!mounted) return;
         if (result != null) {
           setState(() {
@@ -336,7 +334,7 @@ class _AdminScanScreenState extends State<AdminScanScreen>
                         Icon(
                           Icons.history_rounded,
                           size: 18,
-                          color: PupColors.pupMaroon,
+                          color: PupColors.brand(context),
                         ),
                         const SizedBox(width: 8),
                         Expanded(

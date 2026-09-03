@@ -131,8 +131,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
                                   vertical: 6,
                                 ),
                                 minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
                                 ),
@@ -289,10 +288,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     }
   }
 
-  Future<void> _openEditSheet(
-    BuildContext context,
-    Equipment e,
-  ) async {
+  Future<void> _openEditSheet(BuildContext context, Equipment e) async {
     final ctrl = context.read<StudentDashboardController>();
     final updated = await showModalBottomSheet<Equipment?>(
       context: context,
@@ -323,10 +319,7 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
     }
   }
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    Equipment e,
-  ) async {
+  Future<void> _confirmDelete(BuildContext context, Equipment e) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -469,15 +462,17 @@ class _AdminInventoryScreenState extends State<AdminInventoryScreen> {
         );
         continue;
       }
-      valid.add(_ParsedEquipment(
-        code: (r['code'] ?? '').trim(),
-        name: (r['name'] ?? '').trim(),
-        category: (r['category'] ?? '').trim(),
-        classification: classification,
-        location: (r['location'] ?? '').trim(),
-        totalCount: total,
-        description: (r['description'] ?? '').trim(),
-      ));
+      valid.add(
+        _ParsedEquipment(
+          code: (r['code'] ?? '').trim(),
+          name: (r['name'] ?? '').trim(),
+          category: (r['category'] ?? '').trim(),
+          classification: classification,
+          location: (r['location'] ?? '').trim(),
+          totalCount: total,
+          description: (r['description'] ?? '').trim(),
+        ),
+      );
     }
 
     if (!context.mounted) return;
@@ -574,7 +569,11 @@ class _CsvImportPreviewDialog extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.check_circle_rounded, color: PupColors.mintGreen, size: 18),
+              Icon(
+                Icons.check_circle_rounded,
+                color: PupColors.mintGreen,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               Text(
                 '$validCount valid row(s) will be imported.',
@@ -689,7 +688,9 @@ class _SearchBar extends StatelessWidget {
         decoration: InputDecoration(
           hintText: 'Search equipment by name, ID, or category...',
           hintStyle: TextStyle(
-            color: PupColors.ashGray.withValues(alpha: 0.7),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.5)
+                : PupColors.ashGray.withValues(alpha: 0.7),
             fontWeight: FontWeight.w700,
             fontSize: 13,
           ),
@@ -1142,9 +1143,11 @@ class _EquipmentDetailSheet extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: PupColors.pupMaroon,
+                        foregroundColor: PupColors.brand(context),
                         side: BorderSide(
-                          color: PupColors.pupMaroon.withValues(alpha: 0.5),
+                          color: PupColors.brand(
+                            context,
+                          ).withValues(alpha: 0.5),
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),

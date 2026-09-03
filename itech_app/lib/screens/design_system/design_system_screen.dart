@@ -180,9 +180,7 @@ const _textSpecs = [
 /// Returns black or white depending on the surface luminance so swatch
 /// labels are always legible.
 Color _onColor(Color bg) {
-  return bg.computeLuminance() > 0.55
-      ? const Color(0xFF1B1B1B)
-      : Colors.white;
+  return bg.computeLuminance() > 0.55 ? const Color(0xFF1B1B1B) : Colors.white;
 }
 
 class _ColorGrid extends StatelessWidget {
@@ -199,9 +197,7 @@ class _ColorGrid extends StatelessWidget {
         return Wrap(
           spacing: gap,
           runSpacing: gap,
-          children: [
-            for (final s in specs) _ColorSwatch(spec: s, width: w),
-          ],
+          children: [for (final s in specs) _ColorSwatch(spec: s, width: w)],
         );
       },
     );
@@ -392,10 +388,7 @@ class _ComponentsShowcase extends StatelessWidget {
                 tone: PupColors.mintGreen,
               ),
               SizedBox(width: 12),
-              _DsIconChip(
-                icon: Icons.bolt_rounded,
-                tone: PupColors.cyberAmber,
-              ),
+              _DsIconChip(icon: Icons.bolt_rounded, tone: PupColors.cyberAmber),
             ],
           ),
           const SizedBox(height: 18),
@@ -452,9 +445,9 @@ class _ComponentsShowcase extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: () {},
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: PupColors.pupMaroon,
+                    foregroundColor: PupColors.brand(context),
                     side: BorderSide(
-                      color: PupColors.pupMaroon.withValues(alpha: 0.5),
+                      color: PupColors.brand(context).withValues(alpha: 0.5),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(

@@ -8,12 +8,27 @@ import '../../../theme/design_tokens.dart';
 /// confirmation. Maps 1:1 to the database `return_condition` check
 /// constraint (migration 0034).
 enum ReturnCondition {
-  good('good', 'Good', 'No damage. Item is ready to be re-borrowed.',
-      PupColors.mintGreen, Icons.check_circle_rounded),
-  damaged('damaged', 'Damaged', 'Visible damage. Flag for repair before reuse.',
-      PupColors.cyberAmber, Icons.warning_amber_rounded),
-  needsRepair('needs_repair', 'Needs Repair', 'Functional issue. Take to maintenance.',
-      PupColors.signalRed, Icons.build_rounded);
+  good(
+    'good',
+    'Good',
+    'No damage. Item is ready to be re-borrowed.',
+    PupColors.mintGreen,
+    Icons.check_circle_rounded,
+  ),
+  damaged(
+    'damaged',
+    'Damaged',
+    'Visible damage. Flag for repair before reuse.',
+    PupColors.cyberAmber,
+    Icons.warning_amber_rounded,
+  ),
+  needsRepair(
+    'needs_repair',
+    'Needs Repair',
+    'Functional issue. Take to maintenance.',
+    PupColors.signalRed,
+    Icons.build_rounded,
+  );
 
   const ReturnCondition(
     this.value,
@@ -57,7 +72,8 @@ class ReturnConfirmationSheet extends StatefulWidget {
   final Future<Borrowing?> Function({
     required ReturnCondition condition,
     String? notes,
-  }) onSubmit;
+  })
+  onSubmit;
 
   @override
   State<ReturnConfirmationSheet> createState() =>
@@ -118,8 +134,7 @@ class _ReturnConfirmationSheetState extends State<ReturnConfirmationSheet> {
         return Container(
           decoration: BoxDecoration(
             color: isDark ? theme.colorScheme.surface : PupColors.lightCard,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.15),
@@ -155,9 +170,9 @@ class _ReturnConfirmationSheetState extends State<ReturnConfirmationSheet> {
                         color: PupColors.pupMaroon.withValues(alpha: 0.4),
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.verified_rounded,
-                      color: PupColors.pupMaroon,
+                      color: PupColors.brand(context),
                       size: 18,
                     ),
                   ),
@@ -227,14 +242,14 @@ class _ReturnConfirmationSheetState extends State<ReturnConfirmationSheet> {
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(1000),
-                ],
+                inputFormatters: [LengthLimitingTextInputFormatter(1000)],
                 decoration: InputDecoration(
                   hintText:
                       'e.g. "missing USB cable", "scratched case near the corner"',
                   hintStyle: TextStyle(
-                    color: PupColors.ashGray.withValues(alpha: 0.6),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : PupColors.ashGray.withValues(alpha: 0.6),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -280,8 +295,11 @@ class _ReturnConfirmationSheetState extends State<ReturnConfirmationSheet> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded,
-                          color: _condition.tone, size: 18),
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: _condition.tone,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -337,12 +355,8 @@ class _ReturnConfirmationSheetState extends State<ReturnConfirmationSheet> {
                             )
                           : Icon(_condition.icon, size: 18),
                       label: Text(
-                        _submitting
-                            ? 'Confirming…'
-                            : 'Confirm Return',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                        ),
+                        _submitting ? 'Confirming…' : 'Confirm Return',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: _condition.tone,
@@ -388,17 +402,18 @@ class _MetaCard extends StatelessWidget {
             ? Colors.white.withValues(alpha: 0.04)
             : PupColors.coolSteel,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: subtle.withValues(alpha: 0.18),
-        ),
+        border: Border.all(color: subtle.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.precision_manufacturing_rounded,
-                  size: 16, color: subtle),
+              Icon(
+                Icons.precision_manufacturing_rounded,
+                size: 16,
+                color: subtle,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -523,13 +538,11 @@ class _ConditionOption extends StatelessWidget {
             color: selected
                 ? condition.tone.withValues(alpha: 0.12)
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : PupColors.coolSteel),
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : PupColors.coolSteel),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected
-                  ? condition.tone
-                  : subtle.withValues(alpha: 0.25),
+              color: selected ? condition.tone : subtle.withValues(alpha: 0.25),
               width: selected ? 1.6 : 1,
             ),
           ),
@@ -550,8 +563,11 @@ class _ConditionOption extends StatelessWidget {
                   ),
                 ),
                 child: selected
-                    ? const Icon(Icons.check_rounded,
-                        size: 16, color: Colors.white)
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      )
                     : null,
               ),
               const SizedBox(width: 12),

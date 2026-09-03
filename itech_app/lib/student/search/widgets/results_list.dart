@@ -30,15 +30,28 @@ class ResultsList extends StatelessWidget {
           final e = items[i];
           final available = e.available > 0;
           final tone = available ? PupColors.techCyan : PupColors.signalRed;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final titleColor = isDark
+              ? Theme.of(context).colorScheme.onSurface
+              : PupColors.slateGray;
+          final subColor = isDark
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : PupColors.ashGray;
 
           return GestureDetector(
             onTap: () => onTapEquipment(e),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: isDark
+                    ? PupGlass.darkFill(tone)
+                    : Colors.white.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                border: Border.all(
+                  color: isDark
+                      ? PupGlass.darkBorder(tone)
+                      : Colors.black.withValues(alpha: 0.05),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: tone.withValues(alpha: 0.12),
@@ -73,10 +86,10 @@ class ResultsList extends StatelessWidget {
                           e.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 14,
-                            color: PupColors.slateGray,
+                            color: titleColor,
                           ),
                         ),
                       ),
@@ -107,7 +120,7 @@ class ResultsList extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: PupColors.ashGray,
+                      color: subColor,
                       fontSize: 12,
                     ),
                   ),
@@ -121,9 +134,7 @@ class ResultsList extends StatelessWidget {
                           e.isLiked
                               ? Icons.favorite_rounded
                               : Icons.favorite_border_rounded,
-                          color: e.isLiked
-                              ? PupColors.signalRed
-                              : PupColors.ashGray,
+                          color: e.isLiked ? PupColors.signalRed : subColor,
                           size: 20,
                         ),
                       ),

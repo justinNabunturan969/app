@@ -23,8 +23,9 @@ class AdminOccupancyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primaryText =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final primaryText = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtleText = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
         : PupColors.ashGray;
@@ -138,7 +139,7 @@ class AdminOccupancyScreen extends StatelessWidget {
                             children: [
                               Icon(
                                 Icons.people_alt_rounded,
-                                color: PupColors.pupMaroon,
+                                color: PupColors.brand(context),
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
@@ -168,14 +169,14 @@ class AdminOccupancyScreen extends StatelessWidget {
                     ),
                   ),
                   if (sessions.isEmpty)
-                    const SliverToBoxAdapter(
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 36),
+                        padding: const EdgeInsets.symmetric(vertical: 36),
                         child: Center(
                           child: Text(
                             'No one is online right now.',
                             style: TextStyle(
-                              color: PupColors.ashGray,
+                              color: subtleText,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -187,8 +188,7 @@ class AdminOccupancyScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                       sliver: SliverList.separated(
                         itemCount: sessions.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, i) => _SessionCard(
                           session: sessions[i],
                           onTap: () => _showSessionSheet(context, sessions[i]),
@@ -215,8 +215,7 @@ class AdminOccupancyScreen extends StatelessWidget {
       // The OUTER context is threaded through so the sheet's Force Logout
       // button can dismiss itself first and still run the kick flow from
       // a context that stays valid after the sheet route is popped.
-      builder: (ctx) =>
-          _SessionDetailSheet(session: s, parentContext: context),
+      builder: (ctx) => _SessionDetailSheet(session: s, parentContext: context),
     );
   }
 }
@@ -362,9 +361,7 @@ class _LiveDotState extends State<_LiveDot>
       decoration: BoxDecoration(
         color: PupColors.mintGreen.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: PupColors.mintGreen.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: PupColors.mintGreen.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -426,10 +423,7 @@ class _OccupancyHeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            PupColors.pupMaroon,
-            PupColors.deepMahogany,
-          ],
+          colors: [PupColors.pupMaroon, PupColors.deepMahogany],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -513,8 +507,9 @@ class _OccupancyStatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -640,8 +635,9 @@ class _SessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -674,10 +670,7 @@ class _SessionCard extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      _avatarBg(),
-                      _avatarBg().withValues(alpha: 0.65),
-                    ],
+                    colors: [_avatarBg(), _avatarBg().withValues(alpha: 0.65)],
                   ),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
@@ -719,10 +712,7 @@ class _SessionCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        _StatusBadge(
-                          label: _statusLabel,
-                          tone: _tone,
-                        ),
+                        _StatusBadge(label: _statusLabel, tone: _tone),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -738,11 +728,7 @@ class _SessionCard extends StatelessWidget {
                     if (session.equipmentName.isNotEmpty)
                       Row(
                         children: [
-                          Icon(
-                            Icons.handyman_rounded,
-                            size: 13,
-                            color: subtle,
-                          ),
+                          Icon(Icons.handyman_rounded, size: 13, color: subtle),
                           const SizedBox(width: 5),
                           Expanded(
                             child: Text(
@@ -795,9 +781,7 @@ class _SessionCard extends StatelessWidget {
                               ? 'Idle ${_formatDuration(idleFor)}'
                               : 'Logged in ${_formatDuration(DateTime.now().difference(session.loginAt))}',
                           style: TextStyle(
-                            color: isIdle
-                                ? PupColors.cyberAmber
-                                : subtle,
+                            color: isIdle ? PupColors.cyberAmber : subtle,
                             fontWeight: FontWeight.w800,
                             fontSize: 10.5,
                           ),
@@ -810,11 +794,7 @@ class _SessionCard extends StatelessWidget {
               // Quick action
               PopupMenuButton<String>(
                 tooltip: 'Actions',
-                icon: Icon(
-                  Icons.more_vert_rounded,
-                  color: subtle,
-                  size: 18,
-                ),
+                icon: Icon(Icons.more_vert_rounded, color: subtle, size: 18),
                 onSelected: (v) {
                   if (v == 'kick') onKick();
                   if (v == 'message') {
@@ -879,10 +859,7 @@ class _StatusBadge extends StatelessWidget {
               color: tone,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: tone.withValues(alpha: 0.6),
-                  blurRadius: 4,
-                ),
+                BoxShadow(color: tone.withValues(alpha: 0.6), blurRadius: 4),
               ],
             ),
           ),
@@ -920,10 +897,7 @@ class _MenuRow extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
         ),
       ],
     );
@@ -935,7 +909,10 @@ class _MenuRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _SessionDetailSheet extends StatelessWidget {
-  const _SessionDetailSheet({required this.session, required this.parentContext});
+  const _SessionDetailSheet({
+    required this.session,
+    required this.parentContext,
+  });
   final ActiveSession session;
 
   /// The screen context the sheet was opened from. Still valid after the
@@ -950,8 +927,9 @@ class _SessionDetailSheet extends StatelessWidget {
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -961,9 +939,7 @@ class _SessionDetailSheet extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.18),
@@ -1062,7 +1038,8 @@ class _SessionDetailSheet extends StatelessWidget {
                   icon: Icons.handyman_rounded,
                   tone: PupColors.pupMaroon,
                   label: 'Working with',
-                  value: '${session.equipmentName}  •  ${session.location ?? ''}',
+                  value:
+                      '${session.equipmentName}  •  ${session.location ?? ''}',
                 )
               else
                 _SheetRow(
@@ -1089,9 +1066,11 @@ class _SessionDetailSheet extends StatelessWidget {
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: const Text('Message'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: PupColors.techCyan,
+                        foregroundColor: PupColors.accentText(context),
                         side: BorderSide(
-                          color: PupColors.techCyan.withValues(alpha: 0.45),
+                          color: PupColors.accentText(
+                            context,
+                          ).withValues(alpha: 0.45),
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -1138,7 +1117,9 @@ class _SessionDetailSheet extends StatelessWidget {
     if (d.isNegative) return 'just now';
     if (d.inSeconds < 60) return '${d.inSeconds}s ago';
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-    if (d.inHours < 24) return '${d.inHours}h ${d.inMinutes.remainder(60)}m ago';
+    if (d.inHours < 24) {
+      return '${d.inHours}h ${d.inMinutes.remainder(60)}m ago';
+    }
     return '${d.inDays}d ago';
   }
 
@@ -1171,8 +1152,9 @@ class _SheetRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final titleColor =
-        isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
+    final titleColor = isDark
+        ? theme.colorScheme.onSurface
+        : PupColors.slateGray;
     final subtle = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;
@@ -1195,9 +1177,7 @@ class _SheetRow extends StatelessWidget {
                 ],
               ),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: tone.withValues(alpha: 0.45),
-              ),
+              border: Border.all(color: tone.withValues(alpha: 0.45)),
             ),
             child: Icon(icon, color: tone, size: 16),
           ),

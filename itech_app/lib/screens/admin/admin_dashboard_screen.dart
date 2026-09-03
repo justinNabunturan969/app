@@ -55,10 +55,11 @@ class AdminDashboardScreen extends StatelessWidget {
         // surfaced a "Verify Return" button on every fresh borrow and let
         // the admin accidentally flip a loan to `returned` before the
         // student ever handed the item back, which is what the user hit.
-        final returnRequests = ctrl.activeBorrowings
-            .where((b) => b.status == BorrowingStatus.returnRequested)
-            .toList()
-          ..sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
+        final returnRequests =
+            ctrl.activeBorrowings
+                .where((b) => b.status == BorrowingStatus.returnRequested)
+                .toList()
+              ..sort((a, b) => b.borrowDate.compareTo(a.borrowDate));
         final activity =
             ctrl.activity.where((a) => a.scope == ActivityScope.admin).toList()
               // Sort newest-first by the entry's real timestamp so the feed
@@ -268,7 +269,9 @@ class AdminDashboardScreen extends StatelessWidget {
                                 TextButton(
                                   onPressed: () => onSwitchTab!(3),
                                   style: TextButton.styleFrom(
-                                    foregroundColor: PupColors.techCyan,
+                                    foregroundColor: PupColors.accentText(
+                                      context,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                       vertical: 2,
@@ -299,11 +302,8 @@ class AdminDashboardScreen extends StatelessWidget {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _ReturnConfirmCard(
                                   borrowing: b,
-                                  onConfirm: () => _openReturnConfirmation(
-                                    context,
-                                    ctrl,
-                                    b,
-                                  ),
+                                  onConfirm: () =>
+                                      _openReturnConfirmation(context, ctrl, b),
                                 ),
                               ),
                           const SizedBox(height: 16),
@@ -521,8 +521,7 @@ class AdminDashboardScreen extends StatelessWidget {
         '${result.equipmentName} flagged as damaged. Pulled from the pool until the equipment office marks it fixed.',
       'needs_repair' =>
         '${result.equipmentName} sent to repair. Hidden from students until you re-enable it.',
-      _ =>
-        'Return confirmed for ${result.equipmentName}.',
+      _ => 'Return confirmed for ${result.equipmentName}.',
     };
     final tone = switch (cond) {
       'good' => PupColors.mintGreen,
@@ -1328,10 +1327,7 @@ class _LivePulsingDotState extends State<_LivePulsingDot>
 /// the action button calls [onConfirm] — the parent wires that to
 /// `StudentDashboardController.confirmReturnBorrowing`.
 class _ReturnConfirmCard extends StatelessWidget {
-  const _ReturnConfirmCard({
-    required this.borrowing,
-    required this.onConfirm,
-  });
+  const _ReturnConfirmCard({required this.borrowing, required this.onConfirm});
 
   final Borrowing borrowing;
   final VoidCallback onConfirm;
@@ -1449,10 +1445,7 @@ class _ReturnConfirmCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 7,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: style.tone.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
@@ -1498,4 +1491,3 @@ class _ReturnConfirmCard extends StatelessWidget {
     );
   }
 }
-

@@ -198,7 +198,9 @@ class EmptyActivityHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final tone = PupColors.ashGray;
+    final tone = isDark
+        ? theme.colorScheme.onSurfaceVariant
+        : PupColors.ashGray;
     final messageColor = isDark
         ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
         : PupColors.ashGray;

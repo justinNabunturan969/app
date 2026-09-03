@@ -365,7 +365,13 @@ class _DetailChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: PupColors.ashGray),
+          Icon(
+            icon,
+            size: 12,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : PupColors.ashGray,
+          ),
           const SizedBox(width: 4),
           Text(
             label,
@@ -629,7 +635,9 @@ class _PurposeField extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
-                color: PupColors.ashGray,
+                color: isDark
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : PupColors.ashGray,
               ),
             ),
           ],
@@ -905,7 +913,9 @@ void showBorrowSuccessSnackBar(BuildContext context, String equipmentName) {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: PupColors.ashGray,
+                      color: isDark
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : PupColors.ashGray,
                     ),
                   ),
                 ],

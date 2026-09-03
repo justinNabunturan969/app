@@ -17,6 +17,10 @@ class TrendingSearches extends StatelessWidget {
       'Power Supply',
       'Soldering',
     ];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark
+        ? Theme.of(context).colorScheme.onSurface
+        : PupColors.slateGray;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,7 +32,7 @@ class TrendingSearches extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 14,
-              color: PupColors.slateGray,
+              color: titleColor,
             ),
           ),
         ),
@@ -60,7 +64,7 @@ class TrendingSearches extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
-                        color: PupColors.slateGray,
+                        color: titleColor,
                       ),
                     ),
                   ),
