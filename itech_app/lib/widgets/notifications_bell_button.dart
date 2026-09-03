@@ -60,7 +60,11 @@ class _NotificationsBellButtonState extends State<NotificationsBellButton> {
     if (_entry != null) return;
     HapticFeedback.selectionClick();
     final overlay = Overlay.of(context);
-    _entry = OverlayEntry(builder: (_) => _buildOverlay());
+    // Resolve the controller while this State is still under the shell's
+    // provider; the OverlayEntry subtree is parented to the app Overlay
+    // (above that provider), so the popover re-provides it itself.
+    final ctrl = context.read<StudentDashboardController>();
+    _entry = OverlayEntry(builder: (_) => _buildOverlay(ctrl));
     overlay.insert(_entry!);
     if (mounted) setState(() {});
   }
@@ -75,7 +79,12 @@ class _NotificationsBellButtonState extends State<NotificationsBellButton> {
 
   /// The overlay content: a full-screen tap barrier *under* the popover,
   /// which is anchored to the bell via the [LayerLink].
-  Widget _buildOverlay() {
+  ///
+  /// [ctrl] is re-provided into this subtree because an [OverlayEntry] is
+  /// parented to the app's [Overlay], which sits *above* the shell's
+  /// `ChangeNotifierProvider`. Without this the popover's `Consumer`
+  /// would throw `ProviderNotFoundException` the moment it opens.
+  Widget _buildOverlay(StudentDashboardController ctrl) {
     return Stack(
       children: [
         // Barrier — translucent so taps in empty space dismiss the popover.
@@ -93,7 +102,10 @@ class _NotificationsBellButtonState extends State<NotificationsBellButton> {
           targetAnchor: Alignment.bottomRight,
           followerAnchor: Alignment.topRight,
           offset: const Offset(0, 10),
-          child: _NotificationsPopover(onClose: _close),
+          child: ChangeNotifierProvider<StudentDashboardController>.value(
+            value: ctrl,
+            child: _NotificationsPopover(onClose: _close),
+          ),
         ),
       ],
     );
