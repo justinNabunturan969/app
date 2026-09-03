@@ -6,6 +6,7 @@ import '../../app/theme_menu_button.dart';
 import '../../student/models.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/notifications_bell_button.dart';
 
 /// "My Borrowings" tab.
 ///
@@ -114,6 +115,8 @@ class _StudentBorrowingsScreenState extends State<StudentBorrowingsScreen>
                               ),
                             ),
                             const _HeaderBadge(),
+                            const SizedBox(width: 4),
+                            const NotificationsBellButton(),
                             const SizedBox(width: 4),
                             const ThemeMenuButton(),
                           ],

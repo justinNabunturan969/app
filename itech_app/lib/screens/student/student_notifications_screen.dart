@@ -3,28 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme_menu_button.dart';
-import '../../student/models.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/notification_views.dart';
 
-/// Notifications tab.
+/// Notifications tab (full-page surface).
+///
+/// Used by the admin shell. The student shell now surfaces notifications
+/// through the header bell popover (`NotificationsBellButton`) instead of a
+/// tab, but both render the exact same feed via the shared widgets in
+/// `notification_views.dart`.
 ///
 /// Surfaces every entry in `StudentDashboardController.notifications`, with
 /// type-based coloring, swipe-to-delete, and quick "mark all read" /
-/// "clear all" actions. Reuses the PupColors / PupGlass / tinted icon chip
-/// language shared by the other student tabs.
+/// "clear all" actions.
 class StudentNotificationsScreen extends StatefulWidget {
-  const StudentNotificationsScreen({
-    super.key,
-    this.onReturnRequestedTap,
-  });
-
-  /// Admin-only: invoked when the admin taps a "Return to confirm"
-  /// notification. The handler is expected to switch to the Pending
-  /// Requests tab and pop the return confirmation form for the
-  /// supplied borrowing id. Null on the student side, where this
-  /// gesture doesn't apply.
-  final void Function(String borrowingId)? onReturnRequestedTap;
+  const StudentNotificationsScreen({super.key});
 
   @override
   State<StudentNotificationsScreen> createState() =>
@@ -124,7 +118,7 @@ class _StudentNotificationsScreenState
                           ),
                         ),
                         const SizedBox(height: 14),
-                        _FilterChips(
+                        NotificationFilterChips(
                           selected: _filter,
                           filters: _filters,
                           onSelected: (i) => setState(() => _filter = i),
@@ -135,18 +129,22 @@ class _StudentNotificationsScreenState
                   ),
                 ),
                 if (all.isEmpty)
-                  _EmptyState(
-                    icon: Icons.notifications_off_rounded,
-                    label: 'No notifications yet',
-                    hint: "You'll see updates about your borrowings here.",
-                    subtleText: subtleText,
+                  SliverToBoxAdapter(
+                    child: NotificationEmptyState(
+                      icon: Icons.notifications_off_rounded,
+                      label: 'No notifications yet',
+                      hint: "You'll see updates about your borrowings here.",
+                      subtleText: subtleText,
+                    ),
                   )
                 else if (filtered.isEmpty)
-                  _EmptyState(
-                    icon: Icons.done_all_rounded,
-                    label: 'No unread notifications',
-                    hint: "You're all caught up. Nice.",
-                    subtleText: subtleText,
+                  SliverToBoxAdapter(
+                    child: NotificationEmptyState(
+                      icon: Icons.done_all_rounded,
+                      label: 'No unread notifications',
+                      hint: "You're all caught up. Nice.",
+                      subtleText: subtleText,
+                    ),
                   )
                 else
                   SliverPadding(
@@ -159,7 +157,8 @@ class _StudentNotificationsScreenState
                         return Dismissible(
                           key: ValueKey(n.id),
                           direction: DismissDirection.endToStart,
-                          background: _SwipeDeleteBackground(),
+                          background:
+                              const NotificationSwipeDeleteBackground(),
                           onDismissed: (_) {
                             HapticFeedback.mediumImpact();
                             ctrl.deleteNotification(n.id);
@@ -172,34 +171,12 @@ class _StudentNotificationsScreenState
                                 ),
                               );
                           },
-                          child: _NotificationCard(
+                          child: NotificationCard(
                             notification: n,
                             onTap: n.isRead
                                 ? null
                                 : () {
                                     HapticFeedback.selectionClick();
-                                    // Admin "Return to confirm"
-                                    // notifications carry a
-                                    // relatedBorrowingId — tap them to
-                                    // jump straight to the return
-                                    // confirmation form on the Pending
-                                    // tab. We do that BEFORE marking
-                                    // read so the unread dot is still
-                                    // visible if the user backs out.
-                                    final hasReturnAction =
-                                        widget.onReturnRequestedTap !=
-                                            null &&
-                                            n.relatedBorrowingId != null;
-                                    if (hasReturnAction) {
-                                      widget
-                                          .onReturnRequestedTap!(
-                                            n.relatedBorrowingId!,
-                                          );
-                                      // Mark as read inline — the
-                                      // admin has clearly seen it.
-                                      ctrl.markRead(n.id);
-                                      return;
-                                    }
                                     ctrl.markRead(n.id);
                                   },
                           ),
@@ -276,412 +253,6 @@ class _StudentNotificationsScreenState
         content: Text('All notifications cleared'),
         behavior: SnackBarBehavior.floating,
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Type style — color + icon per NotificationType
-// ─────────────────────────────────────────────────────────────────────────
-
-({Color tone, IconData icon}) _styleFor(NotificationType t) {
-  switch (t) {
-    case NotificationType.approved:
-      return (tone: PupColors.techCyan, icon: Icons.verified_rounded);
-    case NotificationType.rejected:
-      return (tone: PupColors.signalRed, icon: Icons.cancel_rounded);
-    case NotificationType.reminder:
-      return (
-        tone: PupColors.cyberAmber,
-        icon: Icons.notifications_active_rounded,
-      );
-    case NotificationType.overdue:
-      return (tone: PupColors.signalRed, icon: Icons.warning_amber_rounded);
-    case NotificationType.newItem:
-      return (tone: PupColors.mintGreen, icon: Icons.fiber_new_rounded);
-    case NotificationType.returned:
-      return (
-        tone: PupColors.mintGreen,
-        icon: Icons.assignment_turned_in_rounded,
-      );
-  }
-}
-
-String _relativeTime(DateTime t) {
-  final diff = DateTime.now().difference(t);
-  if (diff.inSeconds < 60) return 'Just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  return '${_two(t.month)}/${_two(t.day)}/${t.year}';
-}
-
-String _two(int n) => n.toString().padLeft(2, '0');
-
-// ─────────────────────────────────────────────────────────────────────────
-// Filter chips — mirrors the Home / Borrowings tab pattern
-// ─────────────────────────────────────────────────────────────────────────
-
-class _FilterChips extends StatelessWidget {
-  const _FilterChips({
-    required this.selected,
-    required this.filters,
-    required this.onSelected,
-  });
-
-  final int selected;
-  final List<String> filters;
-  final ValueChanged<int> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final idleBg = Colors.transparent;
-    final idleBorder = isDark
-        ? PupGlass.darkBorder(PupColors.cyberAmber)
-        : PupColors.ashGray.withValues(alpha: 0.3);
-    final idleFg = isDark ? theme.colorScheme.onSurface : PupColors.slateGray;
-
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemBuilder: (context, i) => InkWell(
-          onTap: () => onSelected(i),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: selected == i ? PupColors.cyberAmber : idleBg,
-              border: Border.all(
-                color: selected == i ? PupColors.cyberAmber : idleBorder,
-              ),
-              boxShadow: selected == i
-                  ? [
-                      BoxShadow(
-                        color: PupColors.cyberAmber.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Text(
-              filters[i],
-              style: TextStyle(
-                color: selected == i ? const Color(0xFF1B1B1B) : idleFg,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ),
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemCount: filters.length,
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Notification card
-// ─────────────────────────────────────────────────────────────────────────
-
-class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({required this.notification, required this.onTap});
-
-  final AppNotification notification;
-  final VoidCallback? onTap;
-
-  bool get _isActionable =>
-      notification.relatedBorrowingId != null && !notification.isRead;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final titleColor = isDark
-        ? theme.colorScheme.onSurface
-        : PupColors.slateGray;
-    final subtleText = isDark
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.72)
-        : PupColors.ashGray;
-
-    final style = _styleFor(notification.type);
-    final time = _relativeTime(notification.timestamp);
-    final actionable = _isActionable;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            Container(
-              decoration: PupGlass.statCardGlow(
-                context: context,
-                accent: style.tone,
-                borderRadius: 16,
-              ),
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _TonedIconChip(icon: style.icon, tone: style.tone),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                notification.title,
-                                style: TextStyle(
-                                  color: titleColor,
-                                  fontWeight: notification.isRead
-                                      ? FontWeight.w800
-                                      : FontWeight.w900,
-                                  fontSize: 14,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            if (actionable) ...[
-                              Icon(
-                                Icons.chevron_right_rounded,
-                                color: style.tone,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                            Text(
-                              time,
-                              style: TextStyle(
-                                color: subtleText,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          notification.message,
-                          style: TextStyle(
-                            color: subtleText,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
-                            height: 1.3,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (actionable) ...[
-                          const SizedBox(height: 8),
-                          // Inline "Tap to confirm" pill so the admin
-                          // knows at a glance that this entry is
-                          // actionable (and not just a status update).
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: style.tone.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: style.tone.withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.touch_app_rounded,
-                                  size: 12,
-                                  color: style.tone,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Tap to confirm return',
-                                  style: TextStyle(
-                                    color: style.tone,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10.5,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Unread dot — sits in the top-right corner of the card.
-            if (!notification.isRead)
-              Positioned(
-                top: 12,
-                right: actionable ? 38 : 14,
-                child: IgnorePointer(
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: style.tone,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: style.tone.withValues(alpha: 0.55),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SwipeDeleteBackground extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      alignment: Alignment.centerRight,
-      padding: const EdgeInsets.symmetric(horizontal: 22),
-      decoration: BoxDecoration(
-        color: PupColors.signalRed,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: PupColors.signalRed.withValues(alpha: 0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Delete',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-            ),
-          ),
-          SizedBox(width: 8),
-          Icon(Icons.delete_rounded, color: Colors.white, size: 20),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Empty state
-// ─────────────────────────────────────────────────────────────────────────
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.label,
-    required this.hint,
-    required this.subtleText,
-  });
-
-  final IconData icon;
-  final String label;
-  final String hint;
-  final Color subtleText;
-
-  @override
-  Widget build(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(icon, size: 56, color: subtleText),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: subtleText,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                hint,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: subtleText.withValues(alpha: 0.75),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Toned icon chip — local copy, matches the other tabs
-// ─────────────────────────────────────────────────────────────────────────
-
-class _TonedIconChip extends StatelessWidget {
-  const _TonedIconChip({required this.icon, required this.tone});
-
-  final IconData icon;
-  final Color tone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [tone.withValues(alpha: 0.32), tone.withValues(alpha: 0.08)],
-        ),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: tone.withValues(alpha: 0.45), width: 1.1),
-        boxShadow: [
-          BoxShadow(
-            color: tone.withValues(alpha: 0.18),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Icon(icon, color: tone, size: 20),
     );
   }
 }

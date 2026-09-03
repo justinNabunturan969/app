@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app/theme_menu_button.dart';
 import '../../theme/design_tokens.dart';
 import '../../student/student_dashboard_controller.dart';
+import '../../widgets/notifications_bell_button.dart';
 
 import 'data/mock_data.dart';
 import 'widgets/stat_card.dart';
@@ -77,7 +78,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         centerTitle: false,
-        actions: const [ThemeMenuButton()],
+        actions: const [NotificationsBellButton(), ThemeMenuButton()],
       ),
       body: SafeArea(
         bottom: false,

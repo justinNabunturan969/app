@@ -181,7 +181,7 @@ class _AdminLoginHistoryScreenState extends State<AdminLoginHistoryScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _HistoryStatTile(
-                                  label: 'Today',
+                                  label: 'Log ins Today',
                                   value: today,
                                   tone: PupColors.cyberAmber,
                                   icon: Icons.today_rounded,
@@ -993,7 +993,7 @@ class _AvatarBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = role == 'admin' ? PupColors.pupMaroon : PupColors.techCyan;
+    final tone = role == 'Admin' ? PupColors.pupMaroon : PupColors.techCyan;
     return Container(
       width: 40,
       height: 40,
@@ -1858,3 +1858,4 @@ class _SectionHeading extends StatelessWidget {
     );
   }
 }
+

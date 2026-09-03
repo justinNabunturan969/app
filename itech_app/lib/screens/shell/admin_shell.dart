@@ -35,31 +35,6 @@ class _AdminShellState extends State<AdminShell> {
   /// so a fresh app install doesn't badge the entire backlog.
   DateTime _historyLastSeen = DateTime.now();
 
-  /// ID of the borrowing the Pending Requests tab should auto-open the
-  /// return-confirmation form for. Set by the Notifications tab when
-  /// the admin taps a "Return to confirm" entry. Cleared once the
-  /// pending tab has consumed it.
-  final ValueNotifier<String?> _pendingReturnBorrowingId =
-      ValueNotifier<String?>(null);
-
-  @override
-  void dispose() {
-    _pendingReturnBorrowingId.dispose();
-    super.dispose();
-  }
-
-  /// Called by the Notifications tab when the admin taps a
-  /// "Return to confirm" entry. Switches to the Pending tab and
-  /// hands the borrowing id off so the pending screen can pop the
-  /// form open.
-  void _openReturnConfirmation(String borrowingId) {
-    HapticFeedback.selectionClick();
-    _pendingReturnBorrowingId.value = borrowingId;
-    if (_index != 3) {
-      setState(() => _index = 3);
-    }
-  }
-
   static List<ShellTab> _tabs(
     AppCopy copy, {
     required int pendingCount,
@@ -71,7 +46,7 @@ class _AdminShellState extends State<AdminShell> {
       selectedIcon: Icons.dashboard_rounded,
     ),
     ShellTab(
-      label: 'History',
+      label: 'Log Ins',
       icon: Icons.history_edu_outlined,
       selectedIcon: Icons.history_edu_rounded,
       badgeCount: unseenHistoryCount,
@@ -188,18 +163,11 @@ class _AdminShellState extends State<AdminShell> {
       case 2:
         return const AdminInventoryScreen();
       case 3:
-        // The Pending screen watches _pendingReturnBorrowingId and
-        // pops the form when a "Return to confirm" notification
-        // was tapped.
-        return AdminPendingRequestsScreen(
-          pendingReturnBorrowingId: _pendingReturnBorrowingId,
-        );
+        return const AdminPendingRequestsScreen();
       case 4:
         return const AdminScanScreen();
       case 5:
-        return StudentNotificationsScreen(
-          onReturnRequestedTap: _openReturnConfirmation,
-        );
+        return const StudentNotificationsScreen();
       case 0:
       default:
         return AdminDashboardScreen(onSwitchTab: switchTo);
@@ -346,3 +314,4 @@ class _AdminErrorBanner extends StatelessWidget {
     );
   }
 }
+

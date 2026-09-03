@@ -10,7 +10,6 @@ import '../../widgets/skeleton_loading_view.dart';
 
 import '../student/student_borrowings_screen.dart';
 import '../student/student_home_screen.dart';
-import '../student/student_notifications_screen.dart';
 import '../student/student_profile_screen.dart';
 import '../../features/analytics/analytics_page.dart';
 
@@ -45,11 +44,6 @@ class _StudentShellState extends State<StudentShell> {
       icon: Icons.person_outline_rounded,
       selectedIcon: Icons.person_rounded,
     ),
-    ShellTab(
-      label: copy.notifications,
-      icon: Icons.notifications_none_rounded,
-      selectedIcon: Icons.notifications_rounded,
-    ),
   ];
 
   @override
@@ -64,7 +58,6 @@ class _StudentShellState extends State<StudentShell> {
         return ResponsiveScaffold(
           currentIndex: index,
           tabs: _tabs(copy),
-          unreadCount: ctrl.unreadCount,
           onTabTap: (i) {
             if (i == index) return;
             setState(() => index = i);
@@ -103,8 +96,6 @@ class _StudentShellState extends State<StudentShell> {
         return const StudentBorrowingsScreen();
       case 3:
         return const StudentProfileScreen();
-      case 4:
-        return const StudentNotificationsScreen();
       default:
         return const StudentHomeScreen();
     }

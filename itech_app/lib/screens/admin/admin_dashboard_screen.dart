@@ -130,7 +130,7 @@ class AdminDashboardScreen extends StatelessWidget {
                                 ),
                               ),
                               ProfileAvatarButton(
-                                initials: 'AD',
+                                initials: 'Admin',
                                 roleLabel: 'Admin',
                                 onProfile: () => context.push('/admin/profile'),
                                 onLogout: () => _logout(context),
@@ -1498,3 +1498,4 @@ class _ReturnConfirmCard extends StatelessWidget {
     );
   }
 }
+

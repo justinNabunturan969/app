@@ -875,12 +875,14 @@ class StudentDashboardController extends ChangeNotifier {
     Equipment equipment, {
     int quantity = 1,
     String? purpose,
+    String? room,
   }) async {
     try {
       final created = await bundle.borrowings.create(
         equipmentId: equipment.id,
         quantity: quantity,
         purpose: purpose,
+        room: room,
       );
       _pendingBorrowings = [created, ..._pendingBorrowings];
       _log(

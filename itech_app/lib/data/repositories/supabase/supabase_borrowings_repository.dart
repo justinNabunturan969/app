@@ -18,7 +18,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
   /// to PostgREST. `student` is an alias for the embedded `profiles` row;
   /// its `student_id` field is the school number, not the FK UUID.
   static const _selectWithJoins =
-      'id, equipment_id, student_id, status, purpose, quantity, requested_at, '
+      'id, equipment_id, student_id, status, purpose, quantity, room, requested_at, '
       'borrowed_at, due_at, returned_at, '
       'return_condition, return_notes, confirmed_by, confirmed_at, '
       'equipment:equipment!borrowings_equipment_id_fkey ( id, name ), '
@@ -79,6 +79,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
       studentId: studentNumber,
       studentName: studentName,
       purpose: (row['purpose'] as String?) ?? '',
+      room: (row['room'] as String?) ?? '',
       borrowDate: borrowDate,
       returnDate: returnDate,
       status: status,
@@ -222,6 +223,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     required String equipmentId,
     required int quantity,
     String? purpose,
+    String? room,
   }) async {
     final row = await _client.rpc(
       'request_borrowing',
@@ -229,6 +231,7 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
         'p_equipment_id': equipmentId,
         'p_purpose': purpose ?? '',
         'p_quantity': quantity,
+        'p_room': room,
       },
     );
     return _loadRpcBorrowing(row);

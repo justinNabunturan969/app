@@ -83,6 +83,11 @@ class Borrowing {
   final String studentId;
   final String studentName;
   final String purpose;
+
+  /// Room the student attached to the request ('Room 210' …); empty when
+  /// the request isn't tied to a room.
+  final String room;
+
   final DateTime borrowDate;
   final DateTime returnDate;
   final BorrowingStatus status;
@@ -115,6 +120,7 @@ class Borrowing {
     this.studentId = '2024-0xxxx-MN-0',
     this.studentName = 'Juan Dela Cruz',
     this.purpose = '',
+    this.room = '',
     required this.borrowDate,
     required this.returnDate,
     required this.status,
@@ -137,6 +143,7 @@ class Borrowing {
     String? studentId,
     String? studentName,
     String? purpose,
+    String? room,
     DateTime? borrowDate,
     DateTime? returnDate,
     BorrowingStatus? status,
@@ -156,6 +163,7 @@ class Borrowing {
       studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
       purpose: purpose ?? this.purpose,
+      room: room ?? this.room,
       borrowDate: borrowDate ?? this.borrowDate,
       returnDate: returnDate ?? this.returnDate,
       status: status ?? this.status,
@@ -265,12 +273,6 @@ class AppNotification {
   final DateTime timestamp;
   final bool isRead;
 
-  /// Optional FK to the borrowing the notification is about. Set by the
-  /// server on return-related notifications (migration 0035) so the
-  /// admin can deep-link from the notification straight to the return
-  /// confirmation form. Null for the rest.
-  final String? relatedBorrowingId;
-
   const AppNotification({
     required this.id,
     required this.title,
@@ -278,7 +280,6 @@ class AppNotification {
     required this.type,
     required this.timestamp,
     this.isRead = false,
-    this.relatedBorrowingId,
   });
 
   AppNotification copyWith({
@@ -288,7 +289,6 @@ class AppNotification {
     NotificationType? type,
     DateTime? timestamp,
     bool? isRead,
-    String? relatedBorrowingId,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -297,7 +297,6 @@ class AppNotification {
       type: type ?? this.type,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
-      relatedBorrowingId: relatedBorrowingId ?? this.relatedBorrowingId,
     );
   }
 }

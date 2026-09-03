@@ -39,6 +39,7 @@ abstract class BorrowingsRepository {
     required String equipmentId,
     required int quantity,
     String? purpose,
+    String? room,
   });
 
   Future<void> returnBorrowing(String id);
@@ -116,6 +117,7 @@ class MockBorrowingsRepository implements BorrowingsRepository {
     required String equipmentId,
     required int quantity,
     String? purpose,
+    String? room,
   }) async {
     // The mock has no concept of "current student" — fall back to the
     // seed student so the created borrowing shows up with a believable
@@ -136,6 +138,7 @@ class MockBorrowingsRepository implements BorrowingsRepository {
       equipmentId: equipmentId,
       equipmentName: equipment?.name ?? 'Unknown item',
       purpose: purpose ?? '',
+      room: room ?? '',
       borrowDate: now,
       returnDate: due,
       status: BorrowingStatus.pending,

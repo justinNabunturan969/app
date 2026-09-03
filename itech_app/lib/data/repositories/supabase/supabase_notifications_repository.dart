@@ -22,12 +22,6 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
           DateTime.tryParse((row['created_at'] as String?) ?? '') ??
           DateTime.now(),
       isRead: (row['is_read'] as bool?) ?? false,
-      // Migration 0035 stamps this on the return-related notifications
-      // (admin 'Return to confirm' + student 'Return confirmed') so the
-      // UI can deep-link straight to the borrowing. Null for everything
-      // else — backward compatible with rows written before the column
-      // existed.
-      relatedBorrowingId: row['related_borrowing_id'] as String?,
     );
   }
 

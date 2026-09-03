@@ -5,6 +5,13 @@ import '../../../theme/design_tokens.dart';
 import '../../models.dart';
 import '../../student_dashboard_controller.dart';
 
+/// Rooms inside the iTech facility a request can be tied to. Picked from
+/// a fixed list so admins get a consistent label; `null` means "No room".
+final List<String> _itechRooms = [
+  for (var n = 200; n <= 214; n++) 'Room $n',
+  for (var n = 300; n <= 314; n++) 'Room $n',
+];
+
 /// Bottom sheet that confirms a borrow request. Shows the equipment card,
 /// an optional purpose text field, and handles the submit / loading /
 /// error states in one place. Caller passes the [Equipment] and gets a
@@ -46,6 +53,7 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
   bool _submitting = false;
   String? _error;
   int _quantity = 1;
+  String? _room;
 
   @override
   void dispose() {
@@ -66,6 +74,7 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
         widget.equipment,
         quantity: _quantity,
         purpose: _purposeC.text.trim().isEmpty ? null : _purposeC.text.trim(),
+        room: _room,
       );
       if (!mounted) return;
       Navigator.of(context).pop(created);
@@ -158,6 +167,12 @@ class _BorrowConfirmSheetState extends State<BorrowConfirmSheet> {
                   max: e.available,
                   enabled: !_submitting && !hasOpenRequest,
                   onChanged: (quantity) => setState(() => _quantity = quantity),
+                ),
+                const SizedBox(height: 14),
+                _RoomPicker(
+                  room: _room,
+                  enabled: !_submitting,
+                  onChanged: (room) => setState(() => _room = room),
                 ),
                 const SizedBox(height: 14),
                 _PurposeField(
@@ -473,6 +488,106 @@ class _QuantityButton extends StatelessWidget {
         backgroundColor: PupColors.cyberAmber.withValues(alpha: 0.12),
         minimumSize: const Size(36, 36),
         padding: EdgeInsets.zero,
+      ),
+    );
+  }
+}
+
+class _RoomPicker extends StatelessWidget {
+  const _RoomPicker({
+    required this.room,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  /// Currently selected room label; `null` renders as "No room".
+  final String? room;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final label = room ?? 'No room';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.meeting_room_outlined, color: PupColors.techCyan),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Room',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: textColor,
+                  ),
+                ),
+                Text(
+                  "Where you'll use it",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: textColor.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: room,
+              isDense: true,
+              borderRadius: BorderRadius.circular(12),
+              hint: Text(
+                'No room',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+              disabledHint: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+              ),
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: PupColors.cyberAmber,
+              ),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('No room'),
+                ),
+                for (final r in _itechRooms)
+                  DropdownMenuItem<String>(value: r, child: Text(r)),
+              ],
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import '../../student/search/widgets/voice_search_overlay.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../../widgets/empty_state_view.dart';
+import '../../widgets/notifications_bell_button.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key});
@@ -428,6 +429,8 @@ class _GreetingHeader extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: 6),
+        const NotificationsBellButton(),
         const SizedBox(width: 6),
         const ThemeMenuButton(),
       ],

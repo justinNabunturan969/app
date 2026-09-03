@@ -13,6 +13,7 @@ import '../../features/analytics/widgets/achievement_badge.dart';
 import '../../main.dart';
 import '../../student/student_dashboard_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/notifications_bell_button.dart';
 
 /// Student profile tab.
 ///
@@ -74,6 +75,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               onPressed: () =>
                                   _showEditProfileSheet(context, ctrl),
                             ),
+                            const SizedBox(width: 4),
+                            const NotificationsBellButton(),
                             const SizedBox(width: 4),
                             const ThemeMenuButton(),
                           ],
