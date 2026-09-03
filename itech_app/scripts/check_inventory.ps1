@@ -1,16 +1,51 @@
 # scripts/check_inventory.ps1
 # Diagnostic: snapshot equipment counts + open-borrowing counts + the
 # discrepancy between them. READ-ONLY — no writes, no auth needed beyond
-# the anon key already in supabase.json.
+# the anon key.
 #
-# Usage:  powershell -File scripts/check_inventory.ps1
-#         (or just open in VS Code and run)
+# CREDENTIALS:
+#   Reads SUPABASE_URL and SUPABASE_ANON_KEY from the process environment.
+#   Previously hardcoded inline (git-tracked, public) — that was a
+#   security issue (see docs/security-audit-2026-09-03.md §2.2 H1).
+#
+#   Two ways to set them:
+#     1. Inline (PowerShell):
+#          $env:SUPABASE_URL    = 'https://x.supabase.co'
+#          $env:SUPABASE_ANON_KEY = 'eyJ...'
+#          powershell -File scripts/check_inventory.ps1
+#     2. From scripts/.env (use the template in scripts/.env.example):
+#          Get-Content scripts/.env | ForEach-Object { ... }   # load into $env:
+#          powershell -File scripts/check_inventory.ps1
+#
+# Usage:
+#   powershell -File scripts/check_inventory.ps1
 
 $ErrorActionPreference = 'Stop'
 
-$url    = 'https://obwdgxcfxxixnuqsjfpu.supabase.co'
-$anon   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9id2RneGNmeHhpeG51cXNqZnB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzkwMjYsImV4cCI6MjEwMTIxNTAyNn0.Nb1VQlS13rmOlbziFSRzVJR80S069yZtb4G-1VqM3WI'
-$hdrs   = @{ 'apikey' = $anon; 'Authorization' = "Bearer $anon" }
+# Optional: load scripts/.env if present so the user can run the script
+# with no extra setup. Lines starting with '#' and blanks are skipped.
+$envFile = Join-Path $PSScriptRoot '.env'
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        if ($line -match '^([^=]+)=(.*)$') {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim().Trim('"', "'")
+            if (-not (Test-Path "Env:$name")) {
+                Set-Item -Path "Env:$name" -Value $value
+            }
+        }
+    }
+}
+
+if (-not $env:SUPABASE_URL -or -not $env:SUPABASE_ANON_KEY) {
+    Write-Error "Missing credentials. Set SUPABASE_URL and SUPABASE_ANON_KEY in your environment, or create scripts/.env from scripts/.env.example."
+}
+
+$url  = $env:SUPABASE_URL
+$anon = $env:SUPABASE_ANON_KEY
+$hdrs = @{ 'apikey' = $anon; 'Authorization' = "Bearer $anon" }
 
 function Get-RestJson($path) {
     return Invoke-RestMethod -Uri "$url$path" -Headers $hdrs -Method GET
