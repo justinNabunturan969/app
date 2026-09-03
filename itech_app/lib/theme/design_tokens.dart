@@ -27,6 +27,15 @@ class PupColors {
   // Accent 1
   static const Color cyberAmber = Color(0xFFFFB800); // #FFB800
 
+  /// Deep amber for light-mode text: [cyberAmber] fails WCAG AA on white
+  /// (~1.7:1); this clears it (~5.5:1) while staying in the amber family.
+  static const Color amberDeep = Color(0xFF8A6100); // #8A6100
+
+  /// Amber accent for text/icons that must stay readable on the active surface.
+  /// Bright [cyberAmber] on dark, deep [amberDeep] on light.
+  static Color amberText(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? cyberAmber : amberDeep;
+
   // Accent 2
   static const Color techCyan = Color(0xFF00B4D8); // #00B4D8
 
@@ -41,6 +50,31 @@ class PupColors {
 
   // Success
   static const Color mintGreen = Color(0xFF06D6A0); // #06D6A0
+
+  /// Deep green for light-mode text: [mintGreen] fails WCAG AA on white
+  /// (~1.9:1); this clears it (~5.5:1) while staying in the green family.
+  static const Color greenDeep = Color(0xFF047857); // #047857
+
+  /// Success accent for text/icons that must stay readable on the active
+  /// surface. Bright [mintGreen] on dark, deep [greenDeep] on light.
+  static Color successText(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? mintGreen : greenDeep;
+
+  /// Light-mode-readable variant of a runtime status [tone].
+  ///
+  /// Status chips across the app paint their label with the same tone that
+  /// drives a pale tinted background. The bright accents (cyan/amber/green)
+  /// fail WCAG AA as small text on those near-white light-mode surfaces, so
+  /// deepen them to [cyanDeep]/[amberDeep]/[greenDeep]. Dark mode and tones
+  /// that are already readable (maroon, red, gray) pass through unchanged.
+  /// Also valid as a solid fill under white text.
+  static Color readableTone(BuildContext context, Color tone) {
+    if (Theme.of(context).brightness == Brightness.dark) return tone;
+    if (tone == techCyan) return cyanDeep;
+    if (tone == cyberAmber) return amberDeep;
+    if (tone == mintGreen) return greenDeep;
+    return tone;
+  }
 
   // Danger
   static const Color signalRed = Color(0xFFEF476F); // #EF476F

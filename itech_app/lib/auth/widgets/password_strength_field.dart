@@ -172,7 +172,10 @@ class _PasswordStrengthFieldState extends State<PasswordStrengthField> {
                           strength.label,
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                            color: strength.color,
+                            color: PupColors.readableTone(
+                              context,
+                              strength.color,
+                            ),
                             fontWeight: FontWeight.w900,
                             fontSize: 11,
                             letterSpacing: 0.3,

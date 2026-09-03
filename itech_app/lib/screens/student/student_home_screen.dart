@@ -927,7 +927,7 @@ class _EquipmentCard extends StatelessWidget {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w900,
                           color: available
-                              ? PupColors.cyberAmber
+                              ? PupColors.amberText(context)
                               : PupColors.ashGray,
                           letterSpacing: 0.3,
                         ),

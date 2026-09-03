@@ -40,6 +40,15 @@ class LoginHero extends StatelessWidget {
     final subtleText = isDark
         ? Colors.white.withValues(alpha: 0.75)
         : PupColors.slateGray.withValues(alpha: 0.78);
+    // Bright accents (e.g. techCyan) fail WCAG AA as small text on the
+    // near-white light-mode hero surface, so darken them toward black while
+    // preserving hue. Already-dark accents (e.g. pupMaroon) and every
+    // dark-mode accent stay as-is.
+    final eyebrowColor =
+        isDark ||
+            ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+        ? accent
+        : Color.lerp(accent, Colors.black, 0.45)!;
 
     return Container(
       width: double.infinity,
@@ -50,9 +59,7 @@ class LoginHero extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             cardBg,
-            isDark
-                ? PupColors.darkCardAlt
-                : PupColors.lightCardAlt,
+            isDark ? PupColors.darkCardAlt : PupColors.lightCardAlt,
           ],
         ),
         borderRadius: BorderRadius.circular(20),
@@ -102,7 +109,7 @@ class LoginHero extends StatelessWidget {
                     Text(
                       eyebrow.toUpperCase(),
                       style: TextStyle(
-                        color: accent,
+                        color: eyebrowColor,
                         fontSize: 10.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.4,

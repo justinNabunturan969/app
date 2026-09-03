@@ -848,7 +848,7 @@ class _Avatar extends StatelessWidget {
       child: Text(
         _initials,
         style: TextStyle(
-          color: tone,
+          color: PupColors.readableTone(context, tone),
           fontWeight: FontWeight.w900,
           fontSize: 13,
           letterSpacing: 0.5,
@@ -875,7 +875,7 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color,
+          color: PupColors.readableTone(context, color),
           fontWeight: FontWeight.w900,
           fontSize: 10,
           letterSpacing: 0.4,

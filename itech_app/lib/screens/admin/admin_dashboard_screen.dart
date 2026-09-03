@@ -179,7 +179,9 @@ class AdminDashboardScreen extends StatelessWidget {
                                 TextButton(
                                   onPressed: () => onSwitchTab!(3),
                                   style: TextButton.styleFrom(
-                                    foregroundColor: PupColors.cyberAmber,
+                                    foregroundColor: PupColors.amberText(
+                                      context,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                       vertical: 2,
@@ -1407,7 +1409,7 @@ class _ReturnConfirmCard extends StatelessWidget {
                 child: Text(
                   _initials,
                   style: TextStyle(
-                    color: style.tone,
+                    color: PupColors.readableTone(context, style.tone),
                     fontWeight: FontWeight.w900,
                     fontSize: 11,
                   ),
@@ -1457,7 +1459,7 @@ class _ReturnConfirmCard extends StatelessWidget {
                 child: Text(
                   style.label,
                   style: TextStyle(
-                    color: style.tone,
+                    color: PupColors.readableTone(context, style.tone),
                     fontWeight: FontWeight.w900,
                     fontSize: 9,
                     letterSpacing: 0.4,

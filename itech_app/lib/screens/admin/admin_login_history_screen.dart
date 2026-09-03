@@ -992,7 +992,7 @@ class _AvatarBubble extends StatelessWidget {
       child: Text(
         initials,
         style: TextStyle(
-          color: tone,
+          color: PupColors.readableTone(context, tone),
           fontWeight: FontWeight.w900,
           fontSize: 14,
           letterSpacing: 0.4,
@@ -1024,7 +1024,7 @@ class _ReasonChip extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: tone,
+          color: PupColors.readableTone(context, tone),
           fontWeight: FontWeight.w900,
           fontSize: 10,
           letterSpacing: 0.3,
@@ -1060,7 +1060,7 @@ class _ActivityChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: tone,
+              color: PupColors.readableTone(context, tone),
               fontWeight: FontWeight.w900,
               fontSize: 10,
               letterSpacing: 0.3,

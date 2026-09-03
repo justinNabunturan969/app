@@ -907,7 +907,7 @@ class _InventoryCard extends StatelessWidget {
                   child: Text(
                     status.label,
                     style: TextStyle(
-                      color: status.tone,
+                      color: PupColors.readableTone(context, status.tone),
                       fontWeight: FontWeight.w900,
                       fontSize: 10,
                       letterSpacing: 0.4,
@@ -936,8 +936,8 @@ class _InventoryCard extends StatelessWidget {
                         : 'Computer',
                     style: TextStyle(
                       color: equipment.classification == 'electrical'
-                          ? PupColors.cyberAmber
-                          : PupColors.techCyan,
+                          ? PupColors.amberText(context)
+                          : PupColors.accentText(context),
                       fontWeight: FontWeight.w900,
                       fontSize: 9.5,
                       letterSpacing: 0.4,
@@ -975,7 +975,7 @@ class _InventoryCard extends StatelessWidget {
                 Text(
                   '${equipment.available} / ${equipment.total}',
                   style: TextStyle(
-                    color: status.tone,
+                    color: PupColors.readableTone(context, status.tone),
                     fontWeight: FontWeight.w900,
                     fontSize: 10.5,
                   ),

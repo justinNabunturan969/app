@@ -101,7 +101,7 @@ class _MonthlyActivityBarChartState extends State<MonthlyActivityBarChart>
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        color: PupColors.cyberAmber,
+                        color: PupColors.amberText(context),
                       ),
                     ),
                   ),

@@ -879,7 +879,7 @@ class _RecentScanRow extends StatelessWidget {
           TextButton(
             onPressed: onReturn,
             style: TextButton.styleFrom(
-              foregroundColor: PupColors.mintGreen,
+              foregroundColor: PupColors.successText(context),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1012,7 +1012,7 @@ class _MetaChip extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: tone,
+          color: PupColors.accentText(context),
           fontWeight: FontWeight.w900,
           fontSize: 10,
           letterSpacing: 0.4,

@@ -296,7 +296,7 @@ class _ResultsBody extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     color: e.available > 0
-                        ? PupColors.mintGreen
+                        ? PupColors.successText(context)
                         : PupColors.signalRed,
                   ),
                 ),

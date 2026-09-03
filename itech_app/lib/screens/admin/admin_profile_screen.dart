@@ -115,7 +115,7 @@ class AdminProfileScreen extends StatelessWidget {
                             icon: Icons.verified_user_rounded,
                             message:
                                 'Administrator access is verified through your Supabase profile role.',
-                            color: PupColors.mintGreen,
+                            color: PupColors.successText(context),
                           ),
                         ],
                         const SizedBox(height: 24),

@@ -389,10 +389,10 @@ class _LiveDotState extends State<_LiveDot>
             },
           ),
           const SizedBox(width: 6),
-          const Text(
+          Text(
             'LIVE',
             style: TextStyle(
-              color: PupColors.mintGreen,
+              color: PupColors.successText(context),
               fontWeight: FontWeight.w900,
               fontSize: 10,
               letterSpacing: 1.4,
@@ -781,7 +781,9 @@ class _SessionCard extends StatelessWidget {
                               ? 'Idle ${_formatDuration(idleFor)}'
                               : 'Logged in ${_formatDuration(DateTime.now().difference(session.loginAt))}',
                           style: TextStyle(
-                            color: isIdle ? PupColors.cyberAmber : subtle,
+                            color: isIdle
+                                ? PupColors.amberText(context)
+                                : subtle,
                             fontWeight: FontWeight.w800,
                             fontSize: 10.5,
                           ),
@@ -867,7 +869,7 @@ class _StatusBadge extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: tone,
+              color: PupColors.readableTone(context, tone),
               fontWeight: FontWeight.w900,
               fontSize: 9.5,
               letterSpacing: 0.3,

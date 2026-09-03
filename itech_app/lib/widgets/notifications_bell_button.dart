@@ -276,8 +276,8 @@ class _NotificationsPopoverState extends State<_NotificationsPopover> {
                         color: all.isEmpty
                             ? subtleText
                             : (unread > 0
-                                  ? PupColors.cyberAmber
-                                  : PupColors.mintGreen),
+                                  ? PupColors.amberText(context)
+                                  : PupColors.successText(context)),
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
                       ),
@@ -472,10 +472,10 @@ class _PopoverHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 4),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.notifications_rounded,
             size: 18,
-            color: PupColors.cyberAmber,
+            color: PupColors.amberText(context),
           ),
           const SizedBox(width: 8),
           Text(
@@ -491,7 +491,7 @@ class _PopoverHeader extends StatelessWidget {
             TextButton(
               onPressed: onMarkAllRead,
               style: TextButton.styleFrom(
-                foregroundColor: PupColors.cyberAmber,
+                foregroundColor: PupColors.amberText(context),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 4,

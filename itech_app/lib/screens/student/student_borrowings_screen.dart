@@ -672,7 +672,10 @@ class _BorrowingCard extends StatelessWidget {
                       );
                     },
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: style.tone,
+                      foregroundColor: PupColors.readableTone(
+                        context,
+                        style.tone,
+                      ),
                       side: BorderSide(
                         color: style.tone.withValues(alpha: 0.5),
                       ),
@@ -692,7 +695,10 @@ class _BorrowingCard extends StatelessWidget {
                   child: FilledButton(
                     onPressed: onReturn,
                     style: FilledButton.styleFrom(
-                      backgroundColor: style.tone,
+                      backgroundColor: PupColors.readableTone(
+                        context,
+                        style.tone,
+                      ),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
@@ -887,7 +893,7 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color,
+          color: PupColors.readableTone(context, color),
           fontWeight: FontWeight.w900,
           fontSize: 10,
           letterSpacing: 0.4,

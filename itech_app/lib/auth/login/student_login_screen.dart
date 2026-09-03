@@ -533,9 +533,9 @@ class _KickedBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.admin_panel_settings_rounded,
-            color: PupColors.cyberAmber,
+            color: PupColors.amberText(context),
             size: 20,
           ),
           const SizedBox(width: 10),
@@ -543,10 +543,10 @@ class _KickedBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Signed out by an administrator',
                   style: TextStyle(
-                    color: PupColors.cyberAmber,
+                    color: PupColors.amberText(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
                   ),
@@ -555,7 +555,7 @@ class _KickedBanner extends StatelessWidget {
                 Text(
                   message,
                   style: TextStyle(
-                    color: PupColors.cyberAmber.withValues(alpha: 0.9),
+                    color: PupColors.amberText(context).withValues(alpha: 0.9),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                     height: 1.35,
@@ -695,9 +695,9 @@ class _AttemptsLeftBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
-            color: PupColors.cyberAmber,
+            color: PupColors.amberText(context),
             size: 18,
           ),
           const SizedBox(width: 8),
@@ -705,8 +705,8 @@ class _AttemptsLeftBanner extends StatelessWidget {
             child: Text(
               '$attemptsLeft of $maxAttempts $plural left before your '
               'account is temporarily locked for 5 minutes.',
-              style: const TextStyle(
-                color: Color(0xFF8A6100),
+              style: TextStyle(
+                color: PupColors.amberText(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 12.5,
               ),

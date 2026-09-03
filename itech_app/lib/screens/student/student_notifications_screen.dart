@@ -79,7 +79,7 @@ class _StudentNotificationsScreenState
                                   ctrl.markAllRead();
                                 },
                                 style: TextButton.styleFrom(
-                                  foregroundColor: PupColors.cyberAmber,
+                                  foregroundColor: PupColors.amberText(context),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 10,
                                     vertical: 4,
@@ -111,8 +111,8 @@ class _StudentNotificationsScreenState
                             color: all.isEmpty
                                 ? subtleText
                                 : (unread > 0
-                                      ? PupColors.cyberAmber
-                                      : PupColors.mintGreen),
+                                      ? PupColors.amberText(context)
+                                      : PupColors.successText(context)),
                             fontWeight: FontWeight.w800,
                             fontSize: 12,
                           ),
@@ -157,8 +157,7 @@ class _StudentNotificationsScreenState
                         return Dismissible(
                           key: ValueKey(n.id),
                           direction: DismissDirection.endToStart,
-                          background:
-                              const NotificationSwipeDeleteBackground(),
+                          background: const NotificationSwipeDeleteBackground(),
                           onDismissed: (_) {
                             HapticFeedback.mediumImpact();
                             ctrl.deleteNotification(n.id);

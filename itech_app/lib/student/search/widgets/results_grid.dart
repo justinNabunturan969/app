@@ -38,6 +38,11 @@ class ResultsGrid extends StatelessWidget {
           final e = items[i];
           final available = e.available > 0;
           final tone = available ? PupColors.techCyan : PupColors.signalRed;
+          // techCyan fails AA as small text on the pale light-mode tint, so
+          // use the theme-aware cyan for the label; signalRed stays readable.
+          final toneText = available
+              ? PupColors.accentText(context)
+              : PupColors.signalRed;
           final isDark = Theme.of(context).brightness == Brightness.dark;
           final titleColor = isDark
               ? Theme.of(context).colorScheme.onSurface
@@ -124,7 +129,7 @@ class ResultsGrid extends StatelessWidget {
                         child: Text(
                           available ? 'Open' : 'Out',
                           style: TextStyle(
-                            color: tone,
+                            color: toneText,
                             fontWeight: FontWeight.w900,
                             fontSize: 10,
                             letterSpacing: 0.4,
