@@ -8,6 +8,7 @@ import 'app/app_reloader_stub.dart'
     if (dart.library.js_interop) 'app/app_reloader_web.dart';
 import 'app/session_lifecycle_guard.dart';
 import 'app/theme_controller.dart';
+import 'auth/session/auth_log_redaction.dart';
 import 'auth/session/auth_session_storage.dart';
 import 'data/repositories/repository_bundle.dart';
 import 'env/supabase_config.dart';
@@ -30,10 +31,18 @@ Future<void> main() async {
   // into an opaque red box that's hard to debug. With it, the user sees
   // the error message right where the broken widget was supposed to be,
   // and the rest of the screen keeps working.
+  //
+  // Both the message and the top of the stack pass through
+  // [AuthLogRedaction] before being shown. A future regression that
+  // throws a network exception containing a token (e.g. a JWT slipped
+  // into a 401 body) would otherwise land on the user's screen in
+  // debug builds.
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return _DebugErrorWidget(
-      message: details.exceptionAsString(),
-      stack: details.stack?.toString().split('\n').take(6).join('\n') ?? '',
+      message: AuthLogRedaction.redact(details.exceptionAsString()),
+      stack: AuthLogRedaction.redact(
+        details.stack?.toString().split('\n').take(6).join('\n') ?? '',
+      ),
     );
   };
 

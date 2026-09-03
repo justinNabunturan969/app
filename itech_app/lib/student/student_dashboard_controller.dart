@@ -276,6 +276,10 @@ class StudentDashboardController extends ChangeNotifier {
           ? ActivityScope.admin
           : ActivityScope.student;
       return ActivityEntry(
+        // IconData's constructor is `const`, but `codePoint` is loaded
+        // from a JSON snapshot at runtime, so it can never be a compile-
+        // time constant. The lint warning is a false positive here.
+        // ignore: non_const_argument_for_const_parameter
         icon: IconData(codePoint, fontFamily: 'MaterialIcons'),
         tone: tone,
         title: title,

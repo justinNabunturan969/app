@@ -32,6 +32,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   String? _lastError;
   String? _rememberedUser;
 
+  /// How long a remembered admin credential stays "fresh" enough to be
+  /// auto-applied on the next launch. Past this window the personalised
+  /// greeting is suppressed and the username field is cleared. Admins
+  /// are higher-value targets than students, so the window is shorter.
+  /// See _StudentLoginScreenState._kRememberMeFreshness for the same
+  /// reasoning applied to the student side.
+  static const Duration _kRememberMeFreshness = Duration(days: 3);
+
   @override
   void initState() {
     super.initState();
@@ -40,12 +48,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Future<void> _loadSavedCredentials() async {
     final saved = await authSessionStorage.loadAdminCredentials();
+    final lastLogin = await authSessionStorage.getLastLogin();
     if (!mounted || saved == null) return;
 
+    final shouldPersonalize = lastLogin == null ||
+        DateTime.now().difference(lastLogin) < _kRememberMeFreshness;
+
     setState(() {
-      _facultyUsername.text = saved.facultyUsername;
+      _facultyUsername.text =
+          shouldPersonalize ? saved.facultyUsername : '';
       _rememberMe = saved.rememberMe;
-      _rememberedUser = saved.facultyUsername.isNotEmpty
+      _rememberedUser = (shouldPersonalize && saved.facultyUsername.isNotEmpty)
           ? saved.facultyUsername[0].toUpperCase() +
                 saved.facultyUsername.substring(1)
           : null;

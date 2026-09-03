@@ -2,11 +2,17 @@
 // `dart:html` (only available on web, hence the conditional import in
 // csv_helper.dart). Wraps a `<input type="file">` for picking and an
 // `<a download>` for downloading.
+//
+// TODO: migrate to `package:web` + `dart:js_interop` once Flutter's
+// stable channel stops shipping the deprecated `dart:html`. The
+// migration is a 1:1 swap of the html.* references for
+// document.querySelector / window.open / Blob with the new APIs.
 
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:convert';
 // ignore: avoid_web_libraries_in_flutter
+// ignore: deprecated_member_use
 import 'dart:html' as html;
 
 import 'csv_helper.dart';

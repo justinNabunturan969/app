@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_log_redaction.dart';
+
 enum UserRole { student, admin }
 
 class StudentCredentials {
@@ -284,7 +286,8 @@ class AuthSessionStorage {
           ignoreDuplicates: true,
         );
       } catch (e) {
-        debugPrint('Profile bootstrap skipped: $e');
+        debugPrint('Profile bootstrap skipped: '
+            '${AuthLogRedaction.redact(e.toString())}');
       }
     }
 
@@ -527,7 +530,8 @@ class AuthSessionStorage {
       if (patch.isEmpty) return;
       await _supabase.from('profiles').update(patch).eq('id', user.id);
     } catch (e) {
-      debugPrint('Profile sync skipped: $e');
+      debugPrint('Profile sync skipped: '
+          '${AuthLogRedaction.redact(e.toString())}');
     }
   }
 

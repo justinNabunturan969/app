@@ -47,6 +47,16 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   String? _lockCountdown;
   Timer? _lockTicker;
 
+  /// How long a remembered credential stays "fresh" enough to be
+  /// auto-applied on the next launch. Past this window, the personalised
+  /// "Welcome back" greeting is suppressed and the student ID field is
+  /// cleared so a shared device doesn't leak the previous user's
+  /// identifier to whoever picks up the browser next.
+  /// Set to 7 days — long enough that a student who signs in once a
+  /// week still gets the convenience, short enough that an abandoned
+  /// lab login doesn't pin a name to a machine indefinitely.
+  static const Duration _kRememberMeFreshness = Duration(days: 7);
+
   /// Set when the app was returned here by an administrator force
   /// logout (`kicked=1`). Holds the reason the admin provided, or a
   /// default wording when none was given. Persists across refreshes —
@@ -92,13 +102,25 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     final lastLogin = await authSessionStorage.getLastLogin();
     if (!mounted || saved == null) return;
 
+    // "Welcome back, <name>" is a credential-stuffing head start on a
+    // shared device — anyone who picks up the browser sees the previous
+    // user's first name AND has the student ID pre-filled, and only
+    // needs to guess the password. Suppress the personalised greeting
+    // (and the pre-filled ID) when the saved login is older than
+    // [_kRememberMeFreshness]. After that window the identifier is
+    // forgotten, forcing the next user to re-type the student ID from
+    // their own memory. The "Remember me" checkbox stays checked so
+    // the *next* legitimate sign-in still gets remembered.
+    final shouldPersonalize = lastLogin == null ||
+        DateTime.now().difference(lastLogin) < _kRememberMeFreshness;
+
     setState(() {
-      _studentId.text = saved.studentId;
+      _studentId.text = shouldPersonalize ? saved.studentId : '';
       _rememberMe = saved.rememberMe;
       _lastLogin = lastLogin;
       // The username is the "short" form (e.g. juandelacruz); we surface
       // it capitalized in the welcome back greeting.
-      _rememberedName = saved.username.isNotEmpty
+      _rememberedName = (shouldPersonalize && saved.username.isNotEmpty)
           ? saved.username[0].toUpperCase() + saved.username.substring(1)
           : null;
     });
@@ -126,6 +148,11 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
   /// Convert a Supabase [AuthException] into a one-line message that's
   /// safe to show to end users. We never want to leak the raw server
   /// wording (which can hint at user enumeration).
+  ///
+  /// Every "we don't recognize this identifier" server error — wrong
+  /// password, unknown email, unknown student ID — is collapsed onto the
+  /// same generic wording so an attacker probing a list of student IDs
+  /// or emails can't tell which ones are real.
   String _friendlyAuthError(Object error) {
     final raw = error.toString().toLowerCase();
     if (raw.contains('student-id sign-in is unavailable')) {
@@ -133,7 +160,10 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
           'Sign in with your PUP email instead.';
     }
     if (raw.contains('invalid login credentials') ||
-        raw.contains('invalid_grant')) {
+        raw.contains('invalid_grant') ||
+        raw.contains('user not found') ||
+        raw.contains('no user') ||
+        raw.contains('invalid email or password')) {
       return 'Wrong student ID or password.';
     }
     if (raw.contains('email not confirmed')) {
@@ -146,9 +176,6 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     }
     if (raw.contains('rate limit') || raw.contains('too many')) {
       return 'Too many attempts. Wait a minute and try again.';
-    }
-    if (raw.contains('user not found') || raw.contains('no user')) {
-      return 'No account with that student ID.';
     }
     const setupHint =
         'Confirm this account exists and is confirmed in '
@@ -198,36 +225,33 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
     }
   }
 
-  /// Ask the server (migration 0019) how the failed attempt affected the
-  /// rate limiter for THIS identifier. Shows an "attempts left" hint, or a
-  /// live lockout countdown when the account just got blocked. Best-effort:
-  /// any RPC failure simply leaves the plain error message in place.
+  /// Ask the server (migration 0037) whether the *source IP* is currently
+  /// locked. We deliberately do NOT call `sign_in_attempt_status` here
+  /// anymore — as of 0037 that RPC requires an authenticated session, and
+  /// we are by definition unauthenticated at this point. The IP-level
+  /// status is the more useful feedback in a shared-lab deployment: a
+  /// student who just hit a wrong password should learn whether the
+  /// classroom's egress IP is in a 15-min cooldown, not whether their own
+  /// identifier has 3 tries left. The per-identifier counter still
+  /// exists server-side; it just isn't surfaced here any more, which also
+  /// closes the user-enumeration oracle the old RPC exposed to `anon`.
+  /// Best-effort: any RPC failure leaves the plain error in place.
   Future<void> _refreshRateLimitStatus() async {
-    final identifier = _studentId.text.trim();
-    if (identifier.isEmpty) return;
-
     try {
-      final res = await Supabase.instance.client.rpc(
-        'sign_in_attempt_status',
-        params: {'p_identifier': identifier},
-      );
+      final res = await Supabase.instance.client.rpc('sign_in_ip_status');
       if (res is! Map || !mounted) return;
       final data = Map<String, dynamic>.from(res);
 
       final untilRaw = data['locked_until'] as String?;
-      var lockedNow = false;
       if (untilRaw != null) {
         final until = DateTime.tryParse(untilRaw)?.toLocal();
         if (until != null && until.isAfter(DateTime.now())) {
-          lockedNow = true;
           _startLockCountdown(until);
         }
       }
-
-      final left = data['attempts_left'];
-      if (!lockedNow && left is num) {
-        setState(() => _attemptsLeft = left.toInt());
-      }
+      // The IP lockout is the only signal we surface from here. Per-
+      // identifier counters live behind an authenticated RPC now and
+      // aren't visible to anon callers.
     } catch (_) {
       // Feedback is optional — never let it mask the real auth error.
     }
