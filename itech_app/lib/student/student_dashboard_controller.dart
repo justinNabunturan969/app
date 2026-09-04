@@ -1000,6 +1000,61 @@ class StudentDashboardController extends ChangeNotifier {
     }
   }
 
+  /// Admin: refuses a student's return request. The borrowing flips from
+  /// `return_requested` back to `active` and inventory is re-debited (the
+  /// student never actually handed the item back). Returns the persisted
+  /// [Borrowing] on success, or null on failure. Callers should check
+  /// `result != null` before reporting success to the user.
+  ///
+  /// **Student notification**: this is a server-side concern. The
+  /// `transition_borrowing` RPC action `reject_return` should insert a
+  /// `notifications` row with `type = 'rejected'` and the rejection
+  /// notes in the body so the student sees *why* their return was
+  /// refused. The student's realtime subscription in this controller
+  /// (`_startNotificationSubscription`) picks it up automatically.
+  Future<Borrowing?> rejectReturnBorrowing(
+    String id, {
+    String? notes,
+  }) async {
+    try {
+      await bundle.borrowings.rejectReturn(id, notes: notes);
+      final updated = await bundle.borrowings.getById(id);
+      if (updated == null) return null;
+      // The freshly-fetched row already carries the server-side notes
+      // (transition_borrowing writes them into `return_notes`); we only
+      // overlay a local copy if the server didn't echo them back, so
+      // the admin sees their own reason immediately.
+      final withNotes = (notes != null && notes.isNotEmpty)
+          ? updated.copyWith(returnNotes: notes)
+          : updated;
+      // The row was sitting in activeBorrowings under the
+      // `return_requested` status; status now flips back to `active`,
+      // so replace it in place rather than appending.
+      _activeBorrowings = [
+        for (final b in _activeBorrowings)
+          if (b.id == id) withNotes else b,
+      ];
+      _overdueBorrowings = [
+        for (final b in _overdueBorrowings)
+          if (b.id == id) withNotes else b,
+      ];
+      _log(
+        scope: ActivityScope.admin,
+        icon: Icons.assignment_return_rounded,
+        tone: PupColors.signalRed,
+        title: 'Return rejected: ${withNotes.equipmentName}',
+        subtitle: (notes != null && notes.isNotEmpty)
+            ? '${withNotes.studentName} • $notes'
+            : '${withNotes.studentName} — item not handed back',
+      );
+      notifyListeners();
+      return withNotes;
+    } catch (e) {
+      debugPrint('action failed: $e');
+      return null;
+    }
+  }
+
   /// Admin: approves a pending request. Moves it from `pendingBorrowings`
   /// to `activeBorrowings` with status=active. The original return date
   /// is preserved.

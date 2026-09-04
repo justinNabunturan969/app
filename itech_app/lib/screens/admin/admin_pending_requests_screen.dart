@@ -223,6 +223,9 @@ class _AdminPendingRequestsScreenState
                             onVerifyReturn: isReturnRequest
                                 ? () => _confirmVerifyReturn(context, ctrl, b)
                                 : null,
+                            onRejectReturn: isReturnRequest
+                                ? () => _confirmRejectReturn(context, ctrl, b)
+                                : null,
                           );
                         },
                       ),
@@ -308,6 +311,79 @@ class _AdminPendingRequestsScreenState
       SnackBar(
         content: Text(msg),
         backgroundColor: tone,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Admin refuses a student's return request. The borrowing flips back
+  /// to `active` and inventory is re-debited (the student never handed
+  /// the item over). Optional notes are stored on the row and echoed
+  /// in the rejection notification the student sees in their inbox.
+  Future<void> _confirmRejectReturn(
+    BuildContext context,
+    StudentDashboardController ctrl,
+    Borrowing b,
+  ) async {
+    HapticFeedback.lightImpact();
+    final reasonC = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject return?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Reject ${b.studentName}'s return request for "
+              '${b.equipmentName}? The item will be marked active again '
+              'and the student will be asked to bring it back.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonC,
+              autofocus: true,
+              maxLength: 240,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'e.g. "item not yet returned to the office"',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.signalRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject return'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final notes = reasonC.text.trim();
+    final result = await ctrl.rejectReturnBorrowing(
+      b.id,
+      notes: notes.isEmpty ? null : notes,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result != null
+              ? 'Return rejected — ${b.equipmentName} is back to active.'
+              : 'Could not reject the return. Please try again.',
+        ),
+        backgroundColor: result != null ? PupColors.signalRed : null,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -527,12 +603,14 @@ class _RequestCard extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     this.onVerifyReturn,
+    this.onRejectReturn,
   });
 
   final Borrowing borrowing;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
   final VoidCallback? onVerifyReturn;
+  final VoidCallback? onRejectReturn;
 
   ({Color tone, IconData icon, String label}) get _statusStyle {
     switch (borrowing.status) {
@@ -738,27 +816,55 @@ class _RequestCard extends StatelessWidget {
             ),
           ],
 
-          // Verify-return action (for loans awaiting physical hand-in).
+          // Verify-return actions (for loans awaiting physical hand-in).
+          // The row now offers both Confirm and Reject so the admin can
+          // either close out the loan or send it back to active if the
+          // student didn't actually hand the item over.
           if (onVerifyReturn != null) ...[
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onVerifyReturn,
-                icon: const Icon(Icons.verified_rounded, size: 18),
-                label: const Text(
-                  'Verify Return',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: PupColors.mintGreen,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onRejectReturn,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text(
+                      'Reject',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: PupColors.signalRed,
+                      side: BorderSide(
+                        color: PupColors.signalRed.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: onVerifyReturn,
+                    icon: const Icon(Icons.verified_rounded, size: 18),
+                    label: const Text(
+                      'Confirm Return',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PupColors.mintGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

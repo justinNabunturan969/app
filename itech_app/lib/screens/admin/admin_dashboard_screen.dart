@@ -306,6 +306,8 @@ class AdminDashboardScreen extends StatelessWidget {
                                   borrowing: b,
                                   onConfirm: () =>
                                       _openReturnConfirmation(context, ctrl, b),
+                                  onReject: () =>
+                                      _confirmRejectReturn(context, ctrl, b),
                                 ),
                               ),
                           const SizedBox(height: 16),
@@ -533,6 +535,79 @@ class AdminDashboardScreen extends StatelessWidget {
       SnackBar(
         content: Text(msg),
         backgroundColor: tone,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Admin refuses a return request from the dashboard's Confirm
+  /// Returns section. Same dialog shape as the Pending Requests tab so
+  /// the audit trail is consistent regardless of which surface the
+  /// admin came from.
+  Future<void> _confirmRejectReturn(
+    BuildContext context,
+    StudentDashboardController ctrl,
+    Borrowing b,
+  ) async {
+    HapticFeedback.lightImpact();
+    final reasonC = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject return?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Reject ${b.studentName}'s return request for "
+              '${b.equipmentName}? The item will be marked active again '
+              'and the student will be asked to bring it back.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonC,
+              autofocus: true,
+              maxLength: 240,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'e.g. "item not yet returned to the office"',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: PupColors.signalRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject return'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final notes = reasonC.text.trim();
+    final result = await ctrl.rejectReturnBorrowing(
+      b.id,
+      notes: notes.isEmpty ? null : notes,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result != null
+              ? 'Return rejected — ${b.equipmentName} is back to active.'
+              : 'Could not reject the return. Please try again.',
+        ),
+        backgroundColor: result != null ? PupColors.signalRed : null,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1325,14 +1400,22 @@ class _LivePulsingDotState extends State<_LivePulsingDot>
 
 /// Compact "Confirm Returns" card shown on the admin dashboard for each
 /// loan in the `return_requested` state (plus active/overdue rows the
-/// admin can close out manually if the student never tapped Return). Tapping
-/// the action button calls [onConfirm] — the parent wires that to
-/// `StudentDashboardController.confirmReturnBorrowing`.
+/// admin can close out manually if the student never tapped Return).
+/// Tapping **Confirm** calls [onConfirm] (parent wires that to
+/// `StudentDashboardController.confirmReturnBorrowing`); tapping
+/// **Reject** calls [onReject] (parent wires that to
+/// `StudentDashboardController.rejectReturnBorrowing`). The Reject
+/// button is optional so this card can be reused in read-only contexts.
 class _ReturnConfirmCard extends StatelessWidget {
-  const _ReturnConfirmCard({required this.borrowing, required this.onConfirm});
+  const _ReturnConfirmCard({
+    required this.borrowing,
+    required this.onConfirm,
+    this.onReject,
+  });
 
   final Borrowing borrowing;
   final VoidCallback onConfirm;
+  final VoidCallback? onReject;
 
   ({Color tone, IconData icon, String label}) get _statusStyle {
     switch (borrowing.status) {
@@ -1469,25 +1552,71 @@ class _ReturnConfirmCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onConfirm,
-              icon: const Icon(Icons.verified_rounded, size: 16),
-              label: const Text(
-                'Verify Return',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: PupColors.mintGreen,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          if (onReject == null)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onConfirm,
+                icon: const Icon(Icons.verified_rounded, size: 16),
+                label: const Text(
+                  'Verify Return',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: PupColors.mintGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onReject,
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text(
+                      'Reject',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: PupColors.signalRed,
+                      side: BorderSide(
+                        color: PupColors.signalRed.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: onConfirm,
+                    icon: const Icon(Icons.verified_rounded, size: 16),
+                    label: const Text(
+                      'Confirm Return',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PupColors.mintGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );

@@ -59,6 +59,12 @@ abstract class BorrowingsRepository {
     String? notes,
   });
 
+  /// Admin: refuse a student's return request. The borrowing moves
+  /// back from `return_requested` to `active` and inventory is
+  /// re-debited (the student did not actually hand the item back).
+  /// [notes] are stored on the row as part of the audit trail.
+  Future<void> rejectReturn(String id, {String? notes});
+
   // ── Admin actions ───────────────────────────────────────────────────
   Future<void> approve(String id);
   Future<void> reject(String id);
@@ -187,6 +193,36 @@ class MockBorrowingsRepository implements BorrowingsRepository {
     // the active/overdue lists. The condition / notes are accepted for
     // API parity with the Supabase implementation but ignored in-memory.
     await returnBorrowing(id);
+  }
+
+  // ── Admin: reject a return request ─────────────────────────────────
+  @override
+  Future<void> rejectReturn(String id, {String? notes}) async {
+    // The mock doesn't track inventory counts, so we just flip the
+    // status from return_requested back to active and stash the admin
+    // notes on the row. The Supabase implementation handles the
+    // inventory re-debit through the transition_borrowing RPC.
+    Borrowing? found;
+    List<List<Borrowing>> buckets = [_active, _overdue, _pending, _history];
+    outer:
+    for (final list in buckets) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id == id) {
+          found = list.removeAt(i);
+          break outer;
+        }
+      }
+    }
+    if (found == null) return;
+    _active.insert(
+      0,
+      found.copyWith(
+        status: BorrowingStatus.active,
+        returnNotes: (notes != null && notes.isNotEmpty)
+            ? notes
+            : found.returnNotes,
+      ),
+    );
   }
 
   // ── Admin: approve a pending request ───────────────────────────────

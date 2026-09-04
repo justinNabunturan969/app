@@ -272,6 +272,33 @@ class SupabaseBorrowingsRepository implements BorrowingsRepository {
     );
   }
 
+  /// Admin-only: refuse a student's return request. The borrowing flips
+  /// from `return_requested` back to `active` and inventory is
+  /// re-debited (the student never actually handed the item back).
+  /// [notes] are stored as part of the audit trail.
+  ///
+  /// **Server-side requirements**:
+  /// 1. `transition_borrowing` must accept `p_action = 'reject_return'`
+  ///    (mirror of `request_return`): status `return_requested` → `active`
+  ///    and decrement `equipment.available_count` by the borrowing's
+  ///    quantity.
+  /// 2. The same RPC should insert a `notifications` row for the
+  ///    student with `type = 'rejected'` and a body that includes
+  ///    `p_notes` so the student sees *why* their return was refused
+  ///    in the inbox. The realtime subscription in the student shell
+  ///    picks it up automatically.
+  @override
+  Future<void> rejectReturn(String id, {String? notes}) async {
+    await _client.rpc(
+      'transition_borrowing',
+      params: {
+        'p_borrowing_id': id,
+        'p_action': 'reject_return',
+        'p_notes': notes,
+      },
+    );
+  }
+
   @override
   Future<void> approve(String id) async {
     await _client.rpc(

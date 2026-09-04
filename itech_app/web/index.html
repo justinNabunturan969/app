@@ -104,6 +104,18 @@
     JavaScript bundle indefinitely. We intentionally do not use offline
     caching: each launch should load the current production build instead.
   -->
+  <!--
+    CSP NOTE: the three inline <script> blocks in this file are hash-pinned in
+    vercel.json (script-src 'sha256-...'), NOT allowed via 'unsafe-inline'.
+    Change ANY character inside one of these <script> tags and the browser will
+    silently refuse to run it, so the app freezes on the boot splash — which
+    looks exactly like a deploy failure. After editing any of them, regenerate
+    the hashes and paste them into vercel.json's Content-Security-Policy. Run
+    this from the project root (the CRLF to LF step matters: the browser
+    normalizes line endings before hashing, so a raw-file hash will not match):
+
+      node -e "const c=require('crypto'),h=require('fs').readFileSync('web/index.html','utf8').replace(/\r\n/g,'\n');let m,r=/<script>([\s\S]*?)<\/script>/g;while(m=r.exec(h))console.log('sha256-'+c.createHash('sha256').update(m[1]).digest('base64'))"
+  -->
   <script>
     (function () {
       if (!('serviceWorker' in navigator)) return;
