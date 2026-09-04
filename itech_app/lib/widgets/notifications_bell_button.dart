@@ -371,6 +371,12 @@ class _NotificationsPopoverState extends State<_NotificationsPopover> {
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         final n = filtered[i];
+        // Return-related notifications are heads-ups, not actions. The
+        // admin confirms or rejects from the Pending → Returns tab;
+        // tapping the card used to just mark it read, which the old
+        // "Tap to record the condition" copy implied was something more.
+        final isReturnAlert = n.type == NotificationType.returned;
+        final style = notificationStyleFor(n.type);
         return Dismissible(
           key: ValueKey(n.id),
           direction: DismissDirection.endToStart,
@@ -389,12 +395,18 @@ class _NotificationsPopoverState extends State<_NotificationsPopover> {
           },
           child: NotificationCard(
             notification: n,
-            onTap: n.isRead
+            onTap: (isReturnAlert || n.isRead)
                 ? null
                 : () {
                     HapticFeedback.selectionClick();
                     ctrl.markRead(n.id);
                   },
+            footer: isReturnAlert
+                ? NotificationActionHint(
+                    text: 'Open Pending → Returns to confirm or reject',
+                    accent: style.tone,
+                  )
+                : null,
           ),
         );
       },

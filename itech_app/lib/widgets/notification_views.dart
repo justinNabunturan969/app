@@ -59,15 +59,29 @@ String _two(int n) => n.toString().padLeft(2, '0');
 /// A single notification row: tinted icon chip, title, relative time, body,
 /// and an unread dot in the corner. Tapping an unread card marks it read
 /// (handled by the caller through [onTap]).
+///
+/// For heads-up notifications (e.g. "student marked an item for return")
+/// the caller passes [footer] to render a non-tappable action hint at
+/// the bottom of the card — e.g. *"Go to Pending → Returns"*. The
+/// caller should also pass `onTap: null` in that case so the card stops
+/// looking like a button; the admin acts on it from the Returns tab
+/// instead.
 class NotificationCard extends StatelessWidget {
   const NotificationCard({
     super.key,
     required this.notification,
     required this.onTap,
+    this.footer,
   });
 
   final AppNotification notification;
   final VoidCallback? onTap;
+
+  /// Optional widget rendered below the message body. Used to surface a
+  /// call-to-action hint (e.g. "Go to Returns") for notifications that
+  /// the admin should act on from a specific surface rather than by
+  /// tapping the card itself.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -146,6 +160,10 @@ class NotificationCard extends StatelessWidget {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (footer != null) ...[
+                          const SizedBox(height: 8),
+                          footer!,
+                        ],
                       ],
                     ),
                   ),
@@ -177,6 +195,51 @@ class NotificationCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Action hint — small non-tappable footer for heads-up notifications
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Small accent-colored pill shown at the bottom of a heads-up
+/// notification card (e.g. "Go to Pending → Returns"). Non-interactive
+/// by design — the admin acts on the alert from the referenced surface,
+/// not by tapping the notification itself. Used to retire the old
+/// "Tap to record the condition" affordance, which implied an action
+/// the popover never actually performed.
+class NotificationActionHint extends StatelessWidget {
+  const NotificationActionHint({
+    super.key,
+    required this.text,
+    required this.accent,
+  });
+
+  final String text;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.arrow_forward_rounded, size: 13, color: accent),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: accent,
+              fontWeight: FontWeight.w900,
+              fontSize: 11.5,
+              letterSpacing: 0.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
