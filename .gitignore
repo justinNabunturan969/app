@@ -4,6 +4,8 @@
 !.env.example
 secrets.json
 secrets/
+.credentials/
+.secrets/
 credentials.json
 service-account*.json
 *.pem
@@ -12,9 +14,9 @@ service-account*.json
 *.pfx
 *.jks
 *.keystore
-android/local.properties
-android/app/google-services.json
-android/app/GoogleService-Info.json
+local.properties
+google-services.json
+GoogleService-Info.json
 GoogleService-Info.plist
 
 # Dependencies
