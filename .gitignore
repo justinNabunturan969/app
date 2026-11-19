@@ -1,4 +1,79 @@
+# Secrets and environment files — never commit these
+.env
+.env.*
+!.env.example
+secrets.json
+secrets/
+credentials.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+android/local.properties
+android/app/google-services.json
+android/app/GoogleService-Info.json
+GoogleService-Info.plist
+
+# Dependencies
+node_modules/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+
+# Build output
+build/
+coverage/
+*.pyc
+
+# Flutter / Dart
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+*.g.dart.config
+
+# Android
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+
+# iOS / macOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+**/DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+
+# Vercel and deployment
 .vercel
-.env*
-itech_app.zip
 *.zip
+itech_app.zip
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+*.swp
+*.swo
